@@ -1,0 +1,20 @@
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX grasp: <http://groundedannotationframework.org/grasp#>
+PREFIX n2mu: <http://cltl.nl/leolani/n2mu/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX time: <http://www.w3.org/TR/owl-time/#>
+PREFIX sem: <http://semanticweb.cs.vu.nl/2009/11/sem/>
+PREFIX gaf: <http://groundedannotationframework.org/gaf#>
+PREFIX prov: <http://www.w3.org/ns/prov#>
+
+select ?person ?label ?time
+where {
+
+    ?person rdf:type n2mu:person.
+    ?person rdfs:label ?label.
+    ?person gaf:denotedIn ?mention .
+    ?mention sem:hasBeginTimeStamp ?time
+
+}
+ORDER BY DESC (?time)
+LIMIT 20
