@@ -8,6 +8,7 @@
 #   find (part of) label used in mention
 #   query for labels or features to find matches
 
+import torch
 from cltl.brain import LongTermMemory
 from sentence_transformers import SentenceTransformer, util
 
@@ -41,34 +42,58 @@ m_3 = ['vrouw', 'de vrouw', 'een vrouw', 'met een paardenstaart',
        'met oorbellen', 'met de oorbellen', 'met het bruine badpak',
        'met een bruin badpak']
 
-def model_ambiguity(mention, brain):
-    pass
+characters = {'m_0': m_0, 'm_1': m_1, 'm_2': m_2, 'm_3': m_3}
+
+
+def model_ambiguity(mention, character_descriptions: dict):
+    mention_embedding = model.encode([mention], convert_to_tensor=True)
+    character_scores = character_descriptions.copy()
+    for character in character_scores:
+        character_scores[character] = 0
+    for character, descriptions in character_descriptions.items():
+        desc_embeddings = model.encode(descriptions, convert_to_tensor=True)
+        cosine_scores = util.cos_sim(mention_embedding, desc_embeddings)
+        cosine_sum = torch.sum(cosine_scores)
+        avg_score = float(cosine_sum)/len(descriptions)
+        character_scores[character] = avg_score
+
+    return character_scores
+
+
 
 
 if __name__ == "__main__":
-    mention = ["haar"]
-    mention2 = ["baardmans"]
-    mention3 = ["de man met de baard"]
-    descriptions = ["een man", "de man", "met lang blond haar", "met bruin haar", "de vrouw"]
-    descriptions2 = ["een andere man met blond haar", "de man met bruin haar"]
-    descriptions3 = ["een man met een snor", "de vrouw met de baard", "man met baard", "een jongen met stoppels"]
+    current_mention = 'een man met een paardenstaart'
 
-    mention_embedding = model.encode(mention, convert_to_tensor=True)
-    desc_embeddings = model.encode(descriptions, convert_to_tensor=True)
+    scores = model_ambiguity(current_mention, characters)
+    print(scores)
 
-    cosine_scores = util.cos_sim(mention_embedding, desc_embeddings)
-
-    for i in range(len(descriptions)):
-        print("{} \t\t {} \t\t Score: {:.4f}".format(mention[0], descriptions[i], cosine_scores[0][i]))
-
-    print()
-
-    mention_embedding = model.encode(mention2, convert_to_tensor=True)
-    desc_embeddings = model.encode(descriptions3, convert_to_tensor=True)
-
-    cosine_scores = util.cos_sim(mention_embedding, desc_embeddings)
-
-    for i in range(len(descriptions3)):
-        print("{} \t\t {} \t\t Score: {:.4f}".format(mention2[0], descriptions3[i], cosine_scores[0][i]))
+    # mention = ["haar"]
+    # mention2 = ["baardmans"]
+    # mention3 = ["de man met de baard"]
+    # descriptions = ["een man", "de man", "met lang blond haar", "met bruin haar", "de vrouw"]
+    # descriptions2 = ["een andere man met blond haar", "de man met bruin haar"]
+    # descriptions3 = ["een man met een snor", "de vrouw met de baard", "man met baard", "een jongen met stoppels"]
+    #
+    # mention_embedding = model.encode(mention, convert_to_tensor=True)
+    # desc_embeddings = model.encode(descriptions, convert_to_tensor=True)
+    #
+    # cosine_scores = util.cos_sim(mention_embedding, desc_embeddings)
+    #
+    # for i in range(len(descriptions)):
+    #     print("{} \t\t {} \t\t Score: {:.4f}".format(mention[0], descriptions[i], cosine_scores[0][i]))
+    #
+    # print()
+    #
+    # mention_embedding = model.encode(mention2, convert_to_tensor=True)
+    # desc_embeddings = model.encode(descriptions3, convert_to_tensor=True)
+    #
+    # cosine_scores = util.cos_sim(mention_embedding, desc_embeddings)
+    # cosine_sum = torch.sum(cosine_scores)
+    # print(float(cosine_sum))
+    # print(cosine_sum)
+    #
+    # for i in range(len(descriptions3)):
+    #     print("{} \t\t {} \t\t Score: {:.4f}".format(mention2[0], descriptions3[i], cosine_scores[0][i]))
 
 

@@ -10,6 +10,7 @@ setup(
     name="spot.disambiguation_model",
     description="Repository for disambiguating mentions used during the SPOT reference game",
     version=version,
+    data_files=[('VERSION', ['VERSION'])],
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/jaapkruijt/spot_scenario_creation",
@@ -27,7 +28,8 @@ setup(
         'cltl.brain',
         "cltl.combot",
         "sentence_transformers",
-        "spacy"
+        "spacy",
+        "torch"
     ],
     extras_require={
         "service": [
