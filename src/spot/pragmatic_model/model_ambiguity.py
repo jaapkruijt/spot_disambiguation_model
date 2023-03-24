@@ -11,62 +11,57 @@
 import torch
 from cltl.brain import LongTermMemory
 from sentence_transformers import SentenceTransformer, util
+from world import characters
 
 model = SentenceTransformer('distiluse-base-multilingual-cased-v1')
 
-m_0 = ['man', 'de man', 'een man', 'met een paardenstaart', 'met de paardenstaart,',
-       'met een baard', 'met de baard', 'met een rode paardenstaart',
-       'met stijl haar', 'met rood haar', 'met stijl rood haar', 'met het rode haar',
-       'met het stijle haar', 'met de rode paardenstaart'
-       'de roodharige man', 'een roodharige man', 'met de hoed', 'met een hoed',
-       'met een blauwe zwembroek', 'met de blauwe zwembroek']
 
-m_1 = ['man', 'de man', 'een man', 'met kort haar', 'met het korte haar',
-       'met stijl haar', 'met het stijle haar', 'met bruin haar',
-       'met het bruine haar', 'met kort stijl haar', 'met bruin stijl haar',
-       'met het korte stijle haar', 'met het bruine stijle haar',
-       'met kort bruin stijl haar', 'met een bril', 'met de bril',
-       'de bruinharige man', 'een bruinharige man',
-       'met een blauwe zwembroek', 'met de blauwe zwembroek']
-
-m_2 = ['man', 'de man', 'een man', 'de kale man', 'met het kale hoofd',
-       'met een kaal hoofd', 'met een baard', 'met de baard', 'met een pet',
-       'met de pet', 'met een rode zwembroek', 'met de rode zwembroek']
-
-m_3 = ['vrouw', 'de vrouw', 'een vrouw', 'met een paardenstaart',
-       'met de paardenstaart', 'met de grijze paardenstaart',
-       'met een grijze paardenstaart', 'met stijl haar', 'met grijs haar',
-       'met stijl grijs haar', 'met het grijze haar', 'met het stijle haar',
-       'met het stijle grijze haar', 'de grijsharige vrouw',
-       'een grijsharige vrouw',
-       'met oorbellen', 'met de oorbellen', 'met het bruine badpak',
-       'met een bruin badpak']
-
-characters = {'m_0': m_0, 'm_1': m_1, 'm_2': m_2, 'm_3': m_3}
-
-
-def model_ambiguity(mention, character_descriptions: dict):
+def calculate_average_simscores(mention, character_descriptions: dict):
     mention_embedding = model.encode([mention], convert_to_tensor=True)
     character_scores = character_descriptions.copy()
     for character in character_scores:
         character_scores[character] = 0
-    for character, descriptions in character_descriptions.items():
-        desc_embeddings = model.encode(descriptions, convert_to_tensor=True)
+    for character, features in character_descriptions.items():
+        descriptors = []
+        for feature, descriptions in features.items():
+            descriptors.extend(descriptions)
+        desc_embeddings = model.encode(descriptors, convert_to_tensor=True)
         cosine_scores = util.cos_sim(mention_embedding, desc_embeddings)
-        cosine_sum = torch.sum(cosine_scores)
-        avg_score = float(cosine_sum)/len(descriptions)
-        character_scores[character] = avg_score
+        cosine_mean = torch.mean(cosine_scores)
+        # avg_score = float(cosine_sum)/len(descriptors)
+        character_scores[character] = float(cosine_mean)
 
     return character_scores
 
 
+def calculate_simscores_per_feature(mention, character_descriptions: dict):
+    mention_embedding = model.encode([mention], convert_to_tensor=True)
+    character_scores = character_descriptions.copy()
+    for character in character_scores:
+        character_scores[character] = 0
+    for character, features in character_descriptions.items():
+        scores = []
+        for feature, description in features.items():
+            if description:
+                desc_embeddings = model.encode(description, convert_to_tensor=True)
+                cosine_scores = util.cos_sim(mention_embedding, desc_embeddings)
+                cosine_mean = torch.mean(cosine_scores)
+                scores.append(cosine_mean)
+        concat_scores = torch.stack(scores)
+        mean_scores = torch.mean(concat_scores)
+        character_scores[character] = mean_scores
+
+    return character_scores
 
 
 if __name__ == "__main__":
-    current_mention = 'een man met een paardenstaart'
+    current_mention = 'die met een paardenstaart'
+    alt_mention1 = 'niet die met een paardenstaart'
 
-    scores = model_ambiguity(current_mention, characters)
+    scores = calculate_simscores_per_feature(current_mention, characters)
+    mean = calculate_average_simscores(current_mention, characters)
     print(scores)
+    print(mean)
 
     # mention = ["haar"]
     # mention2 = ["baardmans"]
