@@ -4,15 +4,6 @@
 # detect conjunctions
 # isolate mention(s)
 
-# analyze mention:
-#   pos
-#   gender
-#   definite/indefinite
-#   noun phrase head
-#   words like 'andere', positional words
-#   visual features
-#   visual similarities
-
 import spacy
 
 nlp = spacy.load('nl_core_news_sm')
