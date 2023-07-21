@@ -4,43 +4,63 @@
 # detect conjunctions
 # isolate mention(s)
 
-import spacy
+# import spacy
+import re
+from thefuzz import fuzz
 
-nlp = spacy.load('nl_core_news_sm')
+# nlp = spacy.load('nl_core_news_sm')
 
-introductions = ["ik", "jij", "heb", "hebt", "bij", "jou", "mij", "dan"]
-positions = ["naast", "links", "rechts", "daarnaast", "daarvan", "van", "staat", "staan", "daar"]
-agreement = ["ook", "niet", "zelfde", "andere", "anders"]
+positions = ['op', 'plek', 'twee', 'drie', 'vier', 'vijf', 'eerste', 'tweede', 'derde', 'vierde',
+             'vijfde', 'dan', 'daarnaast', '1', '2', '3', '4', '5', 'staat', 'plaatje', 'foto', 'nummer', 'de volgende',
+             'is', 'dat is', 'die is', 'ik', 'heb', 'bij', 'mij', 'was', 'het volgende', 'daar', 'laatste', 'plekje',
+             'in het midden', 'links', 'rechts', 'helemaal', 'als eerste', 'als tweede', 'als derde', 'als vierde',
+             'als vijfde', 'als laatste', 'we', 'hebben', 'aan de linkerkant', 'aan de rechterkant',
+             'van links', 'van rechts', 'er', 'op de']
 
-def detect_mentions(utterance: str):
-    pass
+# Spacy: laatste NP in de utterance?
+# split utterance per zin
+# agreement = ["ook", "niet", "zelfde", "andere", "anders"]
+# voor reactie robot: 'oh ja', 'even kijken' etc
+# na vraag robot: 'wie staat er bij jou op...', 'en dan?', 'en de volgende' 'en de laatste', 'wie staat waar?', etc
+# soms volgt een uitweiding van de beschrijving - onderdeel van de mention
+# state tracking: zijn we in een ronde van het spel?
+# return introductie en mention
+
+robot_responses = ['Eens kijken', 'Even kijken hoor, eh', 'Even kijken hoe dat er bij mij uitziet.',
+                   'Eh, even denken', 'Oh ja, die staat bij mij op plek', 'Die staat bij mij ook op die plek.',
+                   'Bij mij staat die op plek', 'Die staat bij mij ergens anders, namelijk de plek',
+                   'Oh, dan staat die op een andere plek', 'Oh ja, die staat bij ons allebei op dezelfde plek']
+robot_questions = ['En de volgende?', 'wie staat er bij jou op de eerste plek?', 'wie staat waar?',
+                   'wat zie je nu?', 'en dan?', 'en de volgende?', 'en de laatste?', 'en daarna?',]
+
+
+def detect_mentions(utterances):
+    for i, utterance in enumerate(utterances):
+        if utterances[i-1]['text'] in robot_questions:
+            intro = []
+            for word in positions:
+                if positions in utterance['text']:
+                    re.sub(word, '', utterance['text'])
+                    intro.append(word)
+            utterance['mention'] = utterance['text']
+        elif utterances[i+1]['text'] in robot_responses:
+            intro = []
+            for word in positions:
+                if positions in utterance['text']:
+                    re.sub(word, '', utterance['text'])
+                    intro.append(word)
+            utterance['mention'] = utterance['text']
+        elif utterances[i-1]['contains_mention']:
+            intro = []
+            for word in positions:
+                if positions in utterance['text']:
+                    re.sub(word, '', utterance['text'])
+                    intro.append(word)
+            utterance['mention'] = utterance['text']
 
 
 
-def analyze_mention(mention: dict):
-    doc = nlp(mention['label'])
-    mention['features'] = []
-    for token in doc:
-        if 'head_pos' not in mention:
-            head_pos = token.head.pos_
-            mention['head_pos'] = head_pos
-        if token.pos_ == 'PRON':
-            gender = token.tag_.split('|')[-1] if 'Prs' in token.morph.get("PronType") else 'Undefined'
-            mention['gender'] = gender
-        elif token.pos_ == 'DET':
-            det = token.morph.get("Definite")[0] if token.morph.get("Definite") else 'Def'
-            mention['determiner'] = det
-        elif token.pos_ in ['NOUN', 'ADJ', 'VERB']:
-            mention['features'].append(token.text)
-
-    return mention
 
 
 if __name__ == "__main__":
-    text = "de man met blond haar"
-    ment = {'label': text}
-    ment = analyze_mention(ment)
-    print(ment)
 
-    # dezelfde, diegene, hetzelfde,
-    # constituency parsing

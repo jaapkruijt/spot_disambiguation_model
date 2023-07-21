@@ -19,20 +19,22 @@ entity_history = []
 recencies = {character: 0 for character in characters}
 
 
-def calculate_average_simscores(mention, character_descriptions: dict):
+def calculate_simscores(mention, character_descriptions: dict):
     mention_embedding = model.encode([mention], convert_to_tensor=True)
-    character_scores = {character: 0 for character in character_descriptions}
+    # character_scores = {character: 0 for character in character_descriptions}
+    scores = []
     for character, features in character_descriptions.items():
         descriptors = []
         for feature, descriptions in features.items():
             descriptors.extend(descriptions)
         desc_embeddings = model.encode(descriptors, convert_to_tensor=True)
         cosine_scores = util.cos_sim(mention_embedding, desc_embeddings)
-        cosine_mean = torch.mean(cosine_scores)
+        scores.append((character, cosine_scores))
+        # cosine_mean = torch.mean(cosine_scores)
         # avg_score = float(cosine_sum)/len(descriptors)
-        character_scores[character] = cosine_mean
+        # character_scores[character] = cosine_mean
 
-    return character_scores
+    return scores
 
 
 def calculate_simscores_per_feature(mention, character_descriptions: dict):
@@ -46,11 +48,46 @@ def calculate_simscores_per_feature(mention, character_descriptions: dict):
                 cosine_scores = util.cos_sim(mention_embedding, desc_embeddings)
                 cosine_mean = torch.mean(cosine_scores)
                 scores.append(cosine_mean)
-        concat_scores = torch.stack(scores)
-        mean_score = torch.mean(concat_scores)
-        character_scores[character] = mean_score
+        # concat_scores = torch.stack(scores)
+        # mean_score = torch.mean(concat_scores)
+        float_scores = [float(score) for score in scores]
+        factor = 1.0 / sum(float_scores)
+        norm_scores = [score*factor for score in float_scores]
+
+        character_scores[character] = scores
 
     return character_scores
+
+
+def surprisal(sim_scores):
+    pass
+
+
+def find_candidates_by_simscore(mention, character_descriptions: dict):
+    mention_embedding = model.encode([mention], convert_to_tensor=True)
+    character_scores = {character: [] for character in character_descriptions}
+    # all_scores = []
+    for character, features in character_descriptions.items():
+        descriptors = []
+        for feature, descriptions in features.items():
+            descriptors.extend(descriptions)
+        desc_embeddings = model.encode(descriptors, convert_to_tensor=True)
+        cosine_scores = util.cos_sim(mention_embedding, desc_embeddings)
+        character_scores[character] = cosine_scores
+        # all_scores.append(torch.mean(cosine_scores))
+    # all_scores = torch.stack(all_scores)
+    # means_total = torch.mean(all_scores)
+
+    # entropies = {character: 0 for character in character_descriptions}
+    # for character, score in character_scores.items():
+    #     entropy = torch.special.entr(score)
+    #     entropies[character] = entropy
+
+    # for character, scores in character_scores.items():
+    #     for score in scores:
+
+    return character_scores, entropies
+
 
 
 def rank_by_recency(entity_recencies):
@@ -81,19 +118,33 @@ def previous_mention_scoring(mention_history, mention):
     return previous_mention_score
 
 
+def literal_listener(mention, character_descriptions, entity_recencies):
+    pass
+
+
 if __name__ == "__main__":
-    current_mention = 'baardmans'
+    current_mention = 'een kale man met een baard'
     alt_mention1 = 'niet die met een paardenstaart'
 
     recencies = {'m_0': 1, 'm_1': 2, 'm_2': 3, 'm_3': 4}
 
-    priors = rank_by_recency(recencies)
-    print(priors)
+    # priors = rank_by_recency(recencies)
+    # print(priors)
 
-    scores = calculate_simscores_per_feature(current_mention, characters)
-    mean = calculate_average_simscores(current_mention, characters)
-    print(scores)
-    print(mean)
+    # scores, entropies = find_candidates_by_simscore(current_mention, characters)
+    # for character, values in scores.items():
+    #     print(character)
+    #     print(values)
+    # for character, entropy in entropies.items():
+    #     print(character)
+    #     print(entropy)
+
+    sc = calculate_simscores(current_mention, characters)
+    for char in sc:
+        print(char)
+
+    # IDEE: top k scores met character erbij, hogere weight als meer scores van 1 character?
+    # Negatieve impact van negatie
 
     # emb1 = model.encode(['liefde'], convert_to_tensor=True)
     # emb2 = model.encode(['bril'], convert_to_tensor=True)
