@@ -9,7 +9,7 @@
 #   query for labels or features to find matches
 
 import torch
-from cltl.brain import LongTermMemory
+# from cltl.brain import LongTermMemory
 from sentence_transformers import SentenceTransformer, util
 from world import characters
 
@@ -29,6 +29,8 @@ def calculate_simscores(mention, character_descriptions: dict):
             descriptors.extend(descriptions)
         desc_embeddings = model.encode(descriptors, convert_to_tensor=True)
         cosine_scores = util.cos_sim(mention_embedding, desc_embeddings)
+        top_scores = torch.topk(cosine_scores, 3)
+        entropies = torch.special.entr(cosine_scores)
         scores.append((character, cosine_scores))
         # cosine_mean = torch.mean(cosine_scores)
         # avg_score = float(cosine_sum)/len(descriptors)
@@ -86,7 +88,7 @@ def find_candidates_by_simscore(mention, character_descriptions: dict):
     # for character, scores in character_scores.items():
     #     for score in scores:
 
-    return character_scores, entropies
+    return character_scores
 
 
 
@@ -125,6 +127,7 @@ def literal_listener(mention, character_descriptions, entity_recencies):
 if __name__ == "__main__":
     current_mention = 'een kale man met een baard'
     alt_mention1 = 'niet die met een paardenstaart'
+    alt_mention2 = 'de kale'
 
     recencies = {'m_0': 1, 'm_1': 2, 'm_2': 3, 'm_3': 4}
 
@@ -140,8 +143,11 @@ if __name__ == "__main__":
     #     print(entropy)
 
     sc = calculate_simscores(current_mention, characters)
+    # features = calculate_simscores_per_feature(current_mention, characters)
     for char in sc:
         print(char)
+    # for char, feature in features.items():
+    #     print(char, feature)
 
     # IDEE: top k scores met character erbij, hogere weight als meer scores van 1 character?
     # Negatieve impact van negatie

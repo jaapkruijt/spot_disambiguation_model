@@ -61,6 +61,5 @@ def detect_mentions(utterances):
 
 
 
-
 if __name__ == "__main__":
-
+    detect_mentions()

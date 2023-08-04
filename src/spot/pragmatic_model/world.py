@@ -31,5 +31,21 @@ m_3 = {'gender': ['vrouw', 'de vrouw', 'een vrouw'], 'hair': ['met een paardenst
        'accessory': ['met oorbellen', 'met de oorbellen'], 'clothing':
         ['met het bruine badpak', 'met een bruin badpak']}
 
-characters = {'m_0': m_0, 'm_1': m_1, 'm_2': m_2, 'm_3': m_3}
+m_0_v2 = {'gender': ['man'], 'hair': ['met paardenstaart',
+       'met stijl haar', 'met rood haar', 'roodharig'],
+       'facial_hair': ['met baard']}
+
+m_1_v2 = {'gender': ['man'], 'hair': ['met kort haar', 'kortharig'
+       'met stijl haar', 'met bruin haar', 'bruinharig'],
+       'facial_hair': [],
+       'accessory': ['met bril']}
+
+m_2_v2 = {'gender': ['man'], 'hair': ['kaal', 'kale'], 'facial_hair': ['met baard']}
+
+m_3_v2 = {'gender': ['vrouw'], 'hair': ['met paardenstaart', 'met stijl haar', 'met grijs haar', 'grijsharig'],
+       'facial_hair': [],
+       'accessory': ['met oorbellen']}
+
+# characters = {'m_0': m_0, 'm_1': m_1, 'm_2': m_2, 'm_3': m_3}
+characters = {'m_0': m_0_v2, 'm_1': m_1_v2, 'm_2': m_2_v2, 'm_3': m_3_v2}
 
