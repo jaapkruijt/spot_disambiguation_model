@@ -65,7 +65,7 @@ class Disambiguator:
             mention_parts = split_on_window(mention)
         else:
             mention_parts = [mention]
-        scoring = self.scorer.calculate_sentence_simscores(mention_parts, list(self.lexicon. base_lexicon().keys()))
+        scoring = self.scorer.calculate_sentence_simscores(mention_parts, list(self.lexicon.base_lexicon().keys()))
         scoring = scoring.tolist()
         matches = []
         for section in scoring:
