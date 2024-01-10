@@ -29,8 +29,10 @@ ak15 = {'gender': 'man', 'hair_style': 'kort haar',
         'hair_color': 'zwart haar', 'hair_type': 'stekels'}
 
 ak_characters = [ak1, ak2, ak3, ak4, ak5, ak6, ak7, ak8, ak9, ak10, ak11, ak12, ak13, ak14, ak15]
-ak_characters_rounds = {'1': [ak1, ak2, ak3, ak10, ak14], '2': [ak1, ak2, ak3, ak12, ak4], '3': [ak1, ak2, ak3, ak8, ak9],
-                 '4': [ak1, ak2, ak3, ak6, ak15], '5': [ak1, ak2, ak3, ak13, ak11], '6': [ak1, ak2, ak3, ak7, ak5]}
+# ak_characters_rounds = {'1': [ak1, ak2, ak3, ak10, ak14], '2': [ak1, ak2, ak3, ak12, ak4], '3': [ak1, ak2, ak3, ak8, ak9],
+#                  '4': [ak1, ak2, ak3, ak6, ak15], '5': [ak1, ak2, ak3, ak13, ak11], '6': [ak1, ak2, ak3, ak7, ak5]}
+ak_characters_rounds = {'1': ['1', '2', '3', '10', '14'], '2': ['1', '2', '3', '12', '4'], '3': ['1', '2', '3', '8', '9'],
+                        '4': ['1', '2', '3', '6', '15'], '5': ['1', '2', '3', '13', '11'], '6': ['1', '2', '3', '7', '5']}
 
 en1 = {'gender': 'man', 'hair_style': 'lang haar',
        'hair_color': 'bruin haar', 'hair_type': 'stijl', 'facial_hair': 'baard'}

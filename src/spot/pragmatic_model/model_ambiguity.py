@@ -1,15 +1,16 @@
 import math
+from enum import Enum
 
 import torch
 from sentence_transformers import SentenceTransformer, util
-from world_short_phrases_nl import ak_characters, en_characters
+from world_short_phrases_nl import ak_characters, ak_characters_rounds
 from gensim.models import word2vec, KeyedVectors
 import numpy as np
 from collections import Counter
 
 model = SentenceTransformer('distiluse-base-multilingual-cased-v1')
-filename = 'local_files/nlwiki_20180420_300d.txt'
-wiki2vec = KeyedVectors.load_word2vec_format(filename)
+filename = '/Users/jaapkruijt/Documents/GitHub/spot_disambiguation_model/local_files/nlwiki_20180420_300d.txt'
+# wiki2vec = KeyedVectors.load_word2vec_format(filename)
 entity_mention_history = {}
 entity_history = []
 recencies = {str(i+1): 0 for i in range(len(ak_characters))}
@@ -29,10 +30,10 @@ class SimilarityScorer:
 
         return cosine_scores
 
-    def calculate_word_simscores(self, source: list, descriptions: list):
-        for attribute in descriptions:
-            for word in source:
-                similarity = wiki2vec.similarity(attribute, word)
+    # def calculate_word_simscores(self, source: list, descriptions: list):
+    #     for attribute in descriptions:
+    #         for word in source:
+    #             similarity = wiki2vec.similarity(attribute, word)
 
     def calculate_textual_overlap(self, source, descriptions):
         textual_match = []
@@ -44,23 +45,69 @@ class SimilarityScorer:
         return textual_match
 
 
+class DisambiguatorStatus(Enum):
+    AWAIT_NEXT = 1
+    SUCCESS = 2
+    NO_MATCH = 3
+    MATCH_MULTIPLE = 4
+    MATCH_PREVIOUS = 5
+
+
 class Disambiguator:
     def __init__(self, world, scenes):
-        self.status = 'fail'
+        self.status = DisambiguatorStatus.AWAIT_NEXT
         self.common_ground = CommonGround()
         self.lexicon = Lexicon()
         self.scorer = SimilarityScorer()
+        self.world = world
+        self.scenes = scenes
+        self.scene_characters = []
 
-    def literal_match(self, mention, threshold=0.6, approach='nli'):  # this works!
+    def start_game(self):
+        self.lexicon.compute_base_lexicon(self.world)
+        self.scene_characters = self.scenes['1']
+        self.lexicon.rsa(self.lexicon.base_lexicon(), self.scene_characters)
+
+    def advance_round(self, round_number):
+        self.scene_characters = self.scenes[str(round_number)]
+        self.lexicon.rsa(self.lexicon.base_lexicon(), self.scene_characters)
+        self.status = DisambiguatorStatus.AWAIT_NEXT
+
+    def advance_position(self):
+        self.status = DisambiguatorStatus.AWAIT_NEXT
+
+    def disambiguate(self, mention, approach='full'):
+        literal_candidate_attributes, literal_candidate_scores = self.literal_match(mention)
+        max_score = max(literal_candidate_scores.values())
+
+        if max_score == 0:
+            self.status = DisambiguatorStatus.NO_MATCH
+            return "No match found"
+
+        top_candidates = []
+        for candidate, score in literal_candidate_scores.items():
+            if score == max_score:
+                top_candidates.append(candidate)
+
+        if len(top_candidates) == 1:
+            self.status = DisambiguatorStatus.SUCCESS
+            return top_candidates[0]
+
+        if len(top_candidates) < 1:
+            self.status = DisambiguatorStatus.MATCH_MULTIPLE
+
+
+    def literal_match(self, mention, threshold=0.6, approach='nli'):
+        # TODO make this compatible with all literal scoring approaches
         """
         compares the mention with descriptions for each character
         :param mention: string
-        :param lexicon: dict
         :param threshold: float
         :param approach: string
         :return: scores for each mention_character pair
         """
-        candidates = {attribute: set() for attribute in self.lexicon.base_lexicon().keys()}
+        candidate_attributes = {character: set() for character in self.scene_characters}
+        candidate_scores = {character: 0 for character in self.scene_characters}
         if len(mention.split()) >= 3:
             mention_parts = split_on_window(mention)
         else:
@@ -74,12 +121,18 @@ class Disambiguator:
             for score, attribute in match:
                 if score >= threshold:
                     for character, value in self.lexicon.base_lexicon()[attribute].items():
-                        if value == 1:
-                            candidates[attribute].add(character)
+                        if value == 1 and character in self.scene_characters:
+                            candidate_attributes[character].add(attribute)
+                            candidate_scores[character] += 1
 
-        return candidates
+        score_sum = sum(list(candidate_scores.values()))
+        if score_sum < 0:
+            for candidate, score in candidate_scores.items():
+                candidate_scores[candidate] = score/score_sum
 
-    def contextual_pragmatic_match(self, candidates, context):
+        return candidate_attributes, candidate_scores
+
+    def contextual_pragmatic_match(self, candidates):
         pass
 
     def mention_history_scoring(self, mention):
@@ -141,7 +194,7 @@ class Lexicon:
                 else:
                     lexicon[attribute][str(i + 1)] = 0
 
-        return lexicon
+        self._base_lexicon = lexicon
 
     def literal_listener(self, lexicon, characters):
         uniform_prior = 1 / len(characters)
@@ -197,9 +250,7 @@ class Lexicon:
         s_prag = self.pragmatic_speaker(l_lit, round_characters, log_base, alpha)
         l_prag = self.pragmatic_listener(s_prag, round_characters)
 
-        return l_prag
-
-
+        self._pragmatic_lexicon = l_prag
 
 
 # taken from stackoverflow
@@ -271,6 +322,10 @@ def rank_by_recency(entity_recencies, characters):
 
 if __name__ == "__main__":
     ment = 'een oudere dame met een bril op.'
+    disambiguator = Disambiguator(ak_characters, ak_characters_rounds)
+    disambiguator.start_game()
+    result = disambiguator.disambiguate(ment)
+    print(result)
     # lex = compute_base_lexicon(ak_characters)
     # # chars = ['1', '2', '3', '13', '11']
     # # literal_listener = literal_listener(lex, chars)
