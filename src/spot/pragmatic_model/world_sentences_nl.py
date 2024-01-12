@@ -1,4 +1,4 @@
-ak1 = {'gender': 'deze persoon is een vrouw', 'age': 'deze persoon is jong', 'hair_style': 'deze persoon heft een bob',
+ak1 = {'gender': 'deze persoon is een vrouw', 'age': 'deze persoon is jong', 'hair_style': 'deze persoon heeft een bob',
        'hair_color': 'deze persoon heeft blond haar', 'hair_type': 'deze persoon heeft stijl haar',
        'accessory': 'deze persoon heeft oorbellen'}
 ak2 = {'gender': 'deze persoon is een man', 'age': ' deze persoon is jong',

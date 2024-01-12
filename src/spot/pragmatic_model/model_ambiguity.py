@@ -1,9 +1,11 @@
 import math
 from enum import Enum
+from scipy.stats import entropy
+from random import choice
 
 import torch
 from sentence_transformers import SentenceTransformer, util
-from world_short_phrases_nl import ak_characters, ak_characters_rounds
+from world_short_phrases_nl import ak_characters, ak_robot_scene
 from gensim.models import word2vec, KeyedVectors
 import numpy as np
 from collections import Counter
@@ -14,8 +16,6 @@ filename = '/Users/jaapkruijt/Documents/GitHub/spot_disambiguation_model/local_f
 entity_mention_history = {}
 entity_history = []
 recencies = {str(i+1): 0 for i in range(len(ak_characters))}
-
-# TODO make classes
 
 
 class SimilarityScorer:
@@ -38,9 +38,9 @@ class SimilarityScorer:
     def calculate_textual_overlap(self, source, descriptions):
         textual_match = []
 
-        for word in source.split():
-            if word in descriptions:
-                textual_match.append(word)
+        for phrase in descriptions:
+            if phrase in source:
+                textual_match.append(phrase)
 
         return textual_match
 
@@ -65,20 +65,24 @@ class Disambiguator:
 
     def start_game(self):
         self.lexicon.compute_base_lexicon(self.world)
-        self.scene_characters = self.scenes['1']
+        self.scene_characters = list(self.scenes['1'].keys())
         self.lexicon.rsa(self.lexicon.base_lexicon(), self.scene_characters)
 
     def advance_round(self, round_number):
-        self.scene_characters = self.scenes[str(round_number)]
+        self.scene_characters = list(self.scenes[str(round_number)].keys())
         self.lexicon.rsa(self.lexicon.base_lexicon(), self.scene_characters)
         self.status = DisambiguatorStatus.AWAIT_NEXT
+
+        return self.lexicon.pragmatic_lexicon()
 
     def advance_position(self):
         self.status = DisambiguatorStatus.AWAIT_NEXT
 
-    def disambiguate(self, mention, approach='full'):
+    def disambiguate(self, mention, approach='full', threshold=0.6):
         literal_candidate_attributes, literal_candidate_scores = self.literal_match(mention)
-        max_score = max(literal_candidate_scores.values())
+        scores = np.array(list(literal_candidate_scores.values()))
+        max_score = scores.max(initial=0)
+        score_entropy = entropy(scores, base=10)
 
         if max_score == 0:
             self.status = DisambiguatorStatus.NO_MATCH
@@ -93,9 +97,22 @@ class Disambiguator:
             self.status = DisambiguatorStatus.SUCCESS
             return top_candidates[0]
 
-        if len(top_candidates) < 1:
+        if len(top_candidates) > 1:
             self.status = DisambiguatorStatus.MATCH_MULTIPLE
+            differences = self.find_differences(top_candidates)
+            if approach == 'full':
+                pragmatic_match = self.contextual_pragmatic_match(literal_candidate_attributes)
+            return differences
 
+    def find_differences(self, candidates):
+        unique_attributes = {candidate: [] for candidate in candidates}
+        for attribute, characters in self.lexicon.base_lexicon().items():
+            options = [character for character in characters if characters[character] == 1]
+            overlap = [character for character in candidates if character in options]
+            if len(overlap) == 1:
+                unique_attributes[overlap[0]].append(attribute)
+
+        return unique_attributes
 
     def literal_match(self, mention, threshold=0.6, approach='nli'):
         # TODO make this compatible with all literal scoring approaches
@@ -123,17 +140,23 @@ class Disambiguator:
                     for character, value in self.lexicon.base_lexicon()[attribute].items():
                         if value == 1 and character in self.scene_characters:
                             candidate_attributes[character].add(attribute)
-                            candidate_scores[character] += 1
+                            candidate_scores[character] += score
 
         score_sum = sum(list(candidate_scores.values()))
-        if score_sum < 0:
+        if score_sum > 0:
             for candidate, score in candidate_scores.items():
                 candidate_scores[candidate] = score/score_sum
 
         return candidate_attributes, candidate_scores
 
     def contextual_pragmatic_match(self, candidates):
-        pass
+        total = {candidate: 0 for candidate in candidates.keys()}
+        for candidate, attributes in candidates.items():
+            for attribute in attributes:
+                probability = self.lexicon.pragmatic_lexicon()[attribute][candidate]
+                total[candidate] += probability
+
+        return total
 
     def mention_history_scoring(self, mention):
         mention_embedding = model.encode([mention], convert_to_tensor=True)
@@ -270,6 +293,12 @@ def split_on_window(sequence, limit=3):
     return results
 
 
+def normalize(value_dict):
+    value_sum = sum(list(value_dict.values()))
+    if value_sum > 0:
+        for key, value in value_dict.items():
+            value_dict
+
 def lexicon_update():
     """
     update character lexicon to account for new descriptions used and update low-scoring lexical items
@@ -322,9 +351,12 @@ def rank_by_recency(entity_recencies, characters):
 
 if __name__ == "__main__":
     ment = 'een oudere dame met een bril op.'
-    disambiguator = Disambiguator(ak_characters, ak_characters_rounds)
+    ment2 = 'een vrouw met blond haar'
+    disambiguator = Disambiguator(ak_characters, ak_robot_scene)
     disambiguator.start_game()
-    result = disambiguator.disambiguate(ment)
+    rational = disambiguator.advance_round('3')
+    print(rational)
+    result = disambiguator.disambiguate(ment2)
     print(result)
     # lex = compute_base_lexicon(ak_characters)
     # # chars = ['1', '2', '3', '13', '11']
