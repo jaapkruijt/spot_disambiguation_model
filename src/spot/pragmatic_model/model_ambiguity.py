@@ -1,6 +1,7 @@
 import math
 from enum import Enum
 from scipy.stats import entropy
+import spacy
 from random import choice
 
 import torch
@@ -8,8 +9,10 @@ from sentence_transformers import SentenceTransformer, util
 from world_short_phrases_nl import ak_characters, ak_robot_scene
 from gensim.models import word2vec, KeyedVectors
 import numpy as np
+from detect_mentions import subtree_right_approach
 from collections import Counter
 
+nlp = spacy.load('nl_core_news_lg')
 model = SentenceTransformer('distiluse-base-multilingual-cased-v1')
 filename = '/Users/jaapkruijt/Documents/GitHub/spot_disambiguation_model/local_files/nlwiki_20180420_300d.txt'
 # wiki2vec = KeyedVectors.load_word2vec_format(filename)
@@ -62,40 +65,71 @@ class Disambiguator:
         self.world = world
         self.scenes = scenes
         self.scene_characters = []
+        self.current_round = 0
 
-    def start_game(self):
-        self.lexicon.compute_base_lexicon(self.world)
-        self.scene_characters = list(self.scenes['1'].keys())
-        self.lexicon.rsa(self.lexicon.base_lexicon(), self.scene_characters)
+    # def start_game(self):
+    #     self.lexicon.compute_base_lexicon(self.world)
+    #     self.scene_characters = list(self.scenes['1'].keys())
+    #     self.lexicon.rsa(self.lexicon.base_lexicon(), self.scene_characters)
+    #     self.current_round = 1
+    #     self.common_ground.current_position = 1
+    #     self.common_ground.update_priors(self.scene_characters)
 
-    def advance_round(self, round_number):
+    def advance_round(self, round_number=None, start=False, ):
+        self.current_round += 1
+        if start:
+            self.lexicon.compute_base_lexicon(self.world)
+        if not round_number:
+            round_number = self.current_round
         self.scene_characters = list(self.scenes[str(round_number)].keys())
         self.lexicon.rsa(self.lexicon.base_lexicon(), self.scene_characters)
         self.status = DisambiguatorStatus.AWAIT_NEXT
+        self.common_ground.current_position = 1
+        self.common_ground.update_priors(self.scene_characters)
+        self.common_ground.positions_discussed[str(round_number)] = {}
 
         return self.lexicon.pragmatic_lexicon()
 
     def advance_position(self):
         self.status = DisambiguatorStatus.AWAIT_NEXT
+        self.common_ground.current_position += 1
 
-    def disambiguate(self, mention, approach='full', threshold=0.6):
-        literal_candidate_attributes, literal_candidate_scores = self.literal_match(mention)
+    def disambiguate(self, mention, approach='full', threshold=0.48):
+        mention.strip()
+        mention.strip('.')
+        history_score = self.mention_history_scoring(mention)
+        literal_candidate_attributes, literal_candidate_scores = self.literal_match(mention, threshold=threshold)
+        for character, score in literal_candidate_scores.items():
+            prior = self.common_ground.priors[character]
+            literal_candidate_scores[character] *= prior
+        literal_candidate_scores = normalize(literal_candidate_scores)
         scores = np.array(list(literal_candidate_scores.values()))
         max_score = scores.max(initial=0)
-        score_entropy = entropy(scores, base=10)
 
-        if max_score == 0:
+        if max_score == 0.0:
             self.status = DisambiguatorStatus.NO_MATCH
             return "No match found"
 
+        score_entropy = entropy(scores, base=10)
         top_candidates = []
         for candidate, score in literal_candidate_scores.items():
             if score == max_score:
                 top_candidates.append(candidate)
 
         if len(top_candidates) == 1:
-            self.status = DisambiguatorStatus.SUCCESS
-            return top_candidates[0]
+            selected = top_candidates[0]
+            if selected in self.common_ground.positions_discussed[str(self.current_round)].values():
+                self.status = DisambiguatorStatus.MATCH_PREVIOUS
+                return "Already discussed this round"
+            else:
+                self.status = DisambiguatorStatus.SUCCESS
+                position = self.scenes[str(self.current_round)][selected]
+                if selected in self.common_ground.history.keys():
+                    self.common_ground.history[selected].append(mention)
+                else:
+                    self.common_ground.history[selected] = [mention]
+                self.common_ground.positions_discussed[self.common_ground.current_position] = selected
+                return selected, position
 
         if len(top_candidates) > 1:
             self.status = DisambiguatorStatus.MATCH_MULTIPLE
@@ -134,18 +168,28 @@ class Disambiguator:
         matches = []
         for section in scoring:
             matches.append(list(zip(section, list(self.lexicon.base_lexicon().keys()))))
-        for match in matches:
+        mention_text = {}
+        for i, match in enumerate(matches):
             for score, attribute in match:
                 if score >= threshold:
+                    mention_text[mention_parts[i]] = None
                     for character, value in self.lexicon.base_lexicon()[attribute].items():
                         if value == 1 and character in self.scene_characters:
                             candidate_attributes[character].add(attribute)
                             candidate_scores[character] += score
 
-        score_sum = sum(list(candidate_scores.values()))
-        if score_sum > 0:
-            for candidate, score in candidate_scores.items():
-                candidate_scores[candidate] = score/score_sum
+        # score_sum = sum(list(candidate_scores.values()))
+        # if score_sum > 0:
+        #     for candidate, score in candidate_scores.items():
+        #         candidate_scores[candidate] = score/score_sum
+        candidate_scores = normalize(candidate_scores)
+
+        mention_string = ''
+        for i, part in enumerate(mention_text):
+            if i == 0:
+                mention_string += part
+            else:
+                mention_string += ' ' + part.split()[-1]
 
         return candidate_attributes, candidate_scores
 
@@ -174,8 +218,16 @@ class Disambiguator:
 class CommonGround:
     def __init__(self):
         self.history = {}
-        self.scene = {}
+        self.positions_discussed = {}
         self.priors = {}
+        self.current_position = 1
+
+    def update_priors(self, characters, character_mentioned=None):
+        if character_mentioned:
+            self.priors[character_mentioned] = 0.1
+            self.priors = normalize(self.priors)
+        else:
+            self.priors = {character: 0.2 for character in characters}
 
 
 class Lexicon:
@@ -228,10 +280,10 @@ class Lexicon:
                 value = referents[character]
                 if value == 1:
                     listener_probs[word][character] = uniform_prior
-            probability_sum = sum(list(listener_probs[word].values()))
-            for referent, probability in listener_probs[word].items():
-                listener_probs[word][referent] = probability / probability_sum
-            # print(sum(list(literal_probs[word].values())))
+            # probability_sum = sum(list(listener_probs[word].values()))
+            # for referent, probability in listener_probs[word].items():
+            #     listener_probs[word][referent] = probability / probability_sum
+            listener_probs[word] = normalize(listener_probs[word])
 
         return listener_probs
 
@@ -245,10 +297,10 @@ class Lexicon:
                 if character in referents.keys():
                     word_probability = math.exp(math.log(alpha * referents[character], log_base))
                     speaker_probs[character][word] = word_probability
-            probability_sum = sum(list(speaker_probs[character].values()))
-            for word, probability in speaker_probs[character].items():
-                speaker_probs[character][word] = probability / probability_sum
-            # print(sum(list(speaker_probs[character].values())))
+            # probability_sum = sum(list(speaker_probs[character].values()))
+            # for word, probability in speaker_probs[character].items():
+            #     speaker_probs[character][word] = probability / probability_sum
+            speaker_probs[character] = normalize(speaker_probs[character])
 
         return speaker_probs
 
@@ -297,7 +349,9 @@ def normalize(value_dict):
     value_sum = sum(list(value_dict.values()))
     if value_sum > 0:
         for key, value in value_dict.items():
-            value_dict
+            value_dict[key] = value/value_sum
+
+    return value_dict
 
 def lexicon_update():
     """
@@ -346,17 +400,20 @@ def rank_by_recency(entity_recencies, characters):
     return character_prior
 
 
-
-
-
 if __name__ == "__main__":
     ment = 'een oudere dame met een bril op.'
-    ment2 = 'een vrouw met blond haar'
+    ment2 = 'Even denken, nummer 3 was een kale meneer.'
+    ment3 = 'Op nummer 5 is dan die bril met wat langer haar.'
+    ment4 = "Oké, die eerste is de man met de bril."
     disambiguator = Disambiguator(ak_characters, ak_robot_scene)
-    disambiguator.start_game()
-    rational = disambiguator.advance_round('3')
-    print(rational)
-    result = disambiguator.disambiguate(ment2)
+    disambiguator.advance_round(start=True)
+    # rational = disambiguator.advance_round('3')
+    # print(rational)
+    disambiguator.advance_round(round_number=2)
+    cand, pos = disambiguator.disambiguate(ment3)
+    print(f'O ja, die staat bij mij op plek {pos}')
+    disambiguator.advance_round(round_number=3)
+    result = disambiguator.disambiguate(ment4)
     print(result)
     # lex = compute_base_lexicon(ak_characters)
     # # chars = ['1', '2', '3', '13', '11']
@@ -366,8 +423,14 @@ if __name__ == "__main__":
     # # print(pragmatic_listener)
     # candidate_list = literal_match(ment, lex)
     # print(candidate_list)
-    # item = 'met bril'
-    # print(calculate_simscores([ment], [item]))
+    # simscorer = SimilarityScorer()
+    # item1 = 'deze man heeft een baard'
+    # item = 'deze man heeft geen baard'
+    # doc1 = nlp(item1)
+    # doc2 = nlp(item)
+    # sim = doc1.similarity(doc2)
+    # print(sim)
+    # print(simscorer.calculate_sentence_simscores([item1], [item]))
 
 
 
