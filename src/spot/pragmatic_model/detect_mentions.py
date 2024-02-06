@@ -5,6 +5,7 @@ from spacy import displacy
 
 nlp = spacy.load('nl_core_news_lg')
 
+
 def subtree_right_approach(utterance):
     mention_list = []
     doc = nlp(utterance)
@@ -26,6 +27,7 @@ def subtree_right_approach(utterance):
     mention = ' '.join(mention_list)
 
     return mention
+
 
 def nsubj_approach(utterance):
     mention_list = []

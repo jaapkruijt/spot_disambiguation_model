@@ -6,10 +6,10 @@ from random import choice
 
 import torch
 from sentence_transformers import SentenceTransformer, util
-from world_short_phrases_nl import ak_characters, ak_robot_scene
+from src.spot.pragmatic_model.world_short_phrases_nl import ak_characters, ak_robot_scene
 from gensim.models import word2vec, KeyedVectors
 import numpy as np
-from detect_mentions import subtree_right_approach
+from src.spot.pragmatic_model.detect_mentions import subtree_right_approach
 from collections import Counter
 
 nlp = spacy.load('nl_core_news_lg')
@@ -58,7 +58,7 @@ class DisambiguatorStatus(Enum):
 
 class Disambiguator:
     def __init__(self, world, scenes):
-        self.status = DisambiguatorStatus.AWAIT_NEXT
+        self._status = DisambiguatorStatus.AWAIT_NEXT
         self.common_ground = CommonGround()
         self.lexicon = Lexicon()
         self.scorer = SimilarityScorer()
@@ -67,13 +67,8 @@ class Disambiguator:
         self.scene_characters = []
         self.current_round = 0
 
-    # def start_game(self):
-    #     self.lexicon.compute_base_lexicon(self.world)
-    #     self.scene_characters = list(self.scenes['1'].keys())
-    #     self.lexicon.rsa(self.lexicon.base_lexicon(), self.scene_characters)
-    #     self.current_round = 1
-    #     self.common_ground.current_position = 1
-    #     self.common_ground.update_priors(self.scene_characters)
+    def status(self):
+        return self._status.name
 
     def advance_round(self, round_number=None, start=False, ):
         self.current_round += 1
@@ -83,7 +78,7 @@ class Disambiguator:
             round_number = self.current_round
         self.scene_characters = list(self.scenes[str(round_number)].keys())
         self.lexicon.rsa(self.lexicon.base_lexicon(), self.scene_characters)
-        self.status = DisambiguatorStatus.AWAIT_NEXT
+        self._status = DisambiguatorStatus.AWAIT_NEXT
         self.common_ground.current_position = 1
         self.common_ground.update_priors(self.scene_characters)
         self.common_ground.positions_discussed[str(round_number)] = {}
@@ -91,26 +86,43 @@ class Disambiguator:
         return self.lexicon.pragmatic_lexicon()
 
     def advance_position(self):
-        self.status = DisambiguatorStatus.AWAIT_NEXT
+        self._status = DisambiguatorStatus.AWAIT_NEXT
         self.common_ground.current_position += 1
 
-    def disambiguate(self, mention, approach='full', threshold=0.48):
+    def confirm_character_position(self, selection, mention):
+        position = self.scenes[str(self.current_round)][selection]
+        if selection in self.common_ground.history.keys():
+            self.common_ground.history[selection].append(mention)
+        else:
+            self.common_ground.history[selection] = [mention]
+        self.common_ground.positions_discussed[str(self.current_round)][self.common_ground.current_position] = selection
+        self.common_ground.update_priors(self.scene_characters, character_mentioned=selection)
+
+        return position
+
+    def disambiguate(self, mention, approach='full', test=False, literal_threshold=0.48, history_threshold=0.80, split_size=3):
         mention.strip()
         mention.strip('.')
         history_score = self.mention_history_scoring(mention)
-        literal_candidate_attributes, literal_candidate_scores = self.literal_match(mention, threshold=threshold)
+        literal_candidate_attributes, literal_candidate_scores = self.literal_match(mention, threshold=literal_threshold, split_size=split_size)
         for character, score in literal_candidate_scores.items():
             prior = self.common_ground.priors[character]
             literal_candidate_scores[character] *= prior
+        for character, scores in history_score.items():
+            for score in scores:
+                if score > history_threshold:
+                    literal_candidate_scores[character] += 0.1
         literal_candidate_scores = normalize(literal_candidate_scores)
         scores = np.array(list(literal_candidate_scores.values()))
         max_score = scores.max(initial=0)
+        selected = '0'
 
         if max_score == 0.0:
-            self.status = DisambiguatorStatus.NO_MATCH
-            return "No match found"
+            self._status = DisambiguatorStatus.NO_MATCH
+            return selected, 1.0, "No match found"
 
-        score_entropy = entropy(scores, base=10)
+        score_entropy = entropy(scores, base=2)
+        certainty = 1-(score_entropy/math.log(5, 2))
         top_candidates = []
         for candidate, score in literal_candidate_scores.items():
             if score == max_score:
@@ -119,24 +131,30 @@ class Disambiguator:
         if len(top_candidates) == 1:
             selected = top_candidates[0]
             if selected in self.common_ground.positions_discussed[str(self.current_round)].values():
-                self.status = DisambiguatorStatus.MATCH_PREVIOUS
-                return "Already discussed this round"
+                self._status = DisambiguatorStatus.MATCH_PREVIOUS
+                if test:
+                    position = self.confirm_character_position(selected, mention)
+                return selected, certainty, "Already discussed this round"
             else:
-                self.status = DisambiguatorStatus.SUCCESS
-                position = self.scenes[str(self.current_round)][selected]
-                if selected in self.common_ground.history.keys():
-                    self.common_ground.history[selected].append(mention)
-                else:
-                    self.common_ground.history[selected] = [mention]
-                self.common_ground.positions_discussed[self.common_ground.current_position] = selected
-                return selected, position
+                self._status = DisambiguatorStatus.SUCCESS
+                position = self.confirm_character_position(selected, mention)
+                return selected, certainty, position
 
         if len(top_candidates) > 1:
-            self.status = DisambiguatorStatus.MATCH_MULTIPLE
+            self._status = DisambiguatorStatus.MATCH_MULTIPLE
             differences = self.find_differences(top_candidates)
             if approach == 'full':
-                pragmatic_match = self.contextual_pragmatic_match(literal_candidate_attributes)
-            return differences
+                top_candidate_attributes = {candidate: attributes for candidate, attributes
+                                            in literal_candidate_attributes.items() if candidate in top_candidates}
+                pragmatic_match = self.contextual_pragmatic_match(top_candidate_attributes)
+                ordered = dict(sorted(pragmatic_match.items(), key=lambda item: item[1], reverse=True))
+                selected = next(iter(ordered))
+                scores = np.array(list(ordered.values()))
+                score_entropy = entropy(scores, base=2)
+                certainty = 1-(score_entropy/math.log(len(ordered), 2))
+                position = self.confirm_character_position(selected, mention)
+
+            return selected, certainty, differences
 
     def find_differences(self, candidates):
         unique_attributes = {candidate: [] for candidate in candidates}
@@ -148,7 +166,7 @@ class Disambiguator:
 
         return unique_attributes
 
-    def literal_match(self, mention, threshold=0.6, approach='nli'):
+    def literal_match(self, mention, threshold=0.6, approach='nli', split_size=3):
         # TODO make this compatible with all literal scoring approaches
         """
         compares the mention with descriptions for each character
@@ -159,8 +177,8 @@ class Disambiguator:
         """
         candidate_attributes = {character: set() for character in self.scene_characters}
         candidate_scores = {character: 0 for character in self.scene_characters}
-        if len(mention.split()) >= 3:
-            mention_parts = split_on_window(mention)
+        if len(mention.split()) >= split_size:
+            mention_parts = split_on_window(mention, limit=split_size)
         else:
             mention_parts = [mention]
         scoring = self.scorer.calculate_sentence_simscores(mention_parts, list(self.lexicon.base_lexicon().keys()))
@@ -178,10 +196,6 @@ class Disambiguator:
                             candidate_attributes[character].add(attribute)
                             candidate_scores[character] += score
 
-        # score_sum = sum(list(candidate_scores.values()))
-        # if score_sum > 0:
-        #     for candidate, score in candidate_scores.items():
-        #         candidate_scores[candidate] = score/score_sum
         candidate_scores = normalize(candidate_scores)
 
         mention_string = ''
@@ -204,13 +218,14 @@ class Disambiguator:
 
     def mention_history_scoring(self, mention):
         mention_embedding = model.encode([mention], convert_to_tensor=True)
-        previous_mention_score = {character: 0 for character in self.common_ground.history}
+        previous_mention_score = {character: [] for character in self.scene_characters}
         for character, previous_mentions in self.common_ground.history.items():
-            if previous_mentions:
-                prev_embeddings = model.encode(previous_mentions, convert_to_tensor=True)
-                cosine_scores = util.cos_sim(mention_embedding, prev_embeddings)
-                cosine_mean = torch.mean(cosine_scores)
-                previous_mention_score[character] = cosine_mean
+            if character in self.scene_characters:
+                if previous_mentions:
+                    prev_embeddings = model.encode(previous_mentions, convert_to_tensor=True)
+                    cosine_scores = util.cos_sim(mention_embedding, prev_embeddings)
+                    cosine_scores = cosine_scores.tolist()
+                    previous_mention_score[character] = [score[0] for score in cosine_scores]
 
         return previous_mention_score
 
@@ -353,37 +368,6 @@ def normalize(value_dict):
 
     return value_dict
 
-def lexicon_update():
-    """
-    update character lexicon to account for new descriptions used and update low-scoring lexical items
-    :return:
-    """
-    pass
-
-
-def history_update():
-    """
-    update history of character mentions
-    :return:
-    """
-    pass
-
-
-def character_priors():
-    pass
-
-
-def common_ground_update():
-    """
-    history_update + lexicon_update + character priors
-    :return:
-    """
-    previous_rounds = {}
-    current_round = {}
-    mention_history = {}
-    lexicon = {}
-    priors = {}
-
 
 def rank_by_recency(entity_recencies, characters):
     character_prior = {character: 1 / len(characters) for character in characters}
@@ -409,11 +393,13 @@ if __name__ == "__main__":
     disambiguator.advance_round(start=True)
     # rational = disambiguator.advance_round('3')
     # print(rational)
-    disambiguator.advance_round(round_number=2)
-    cand, pos = disambiguator.disambiguate(ment3)
-    print(f'O ja, die staat bij mij op plek {pos}')
+    disambiguator.advance_round(round_number=6)
+    cand, cert, aux = disambiguator.disambiguate(ment2)
+    print(cand, cert, aux)
+    print(disambiguator.status())
+    print(f'O ja, die staat bij mij op plek {aux}')
     disambiguator.advance_round(round_number=3)
-    result = disambiguator.disambiguate(ment4)
+    result = disambiguator.disambiguate(ment2)
     print(result)
     # lex = compute_base_lexicon(ak_characters)
     # # chars = ['1', '2', '3', '13', '11']
