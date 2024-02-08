@@ -2,11 +2,12 @@ import math
 from enum import Enum
 from scipy.stats import entropy
 import spacy
+import random
 from random import choice
 
 import torch
 from sentence_transformers import SentenceTransformer, util
-from src.spot.pragmatic_model.world_short_phrases_nl import ak_characters, ak_robot_scene
+from spot.pragmatic_model.world_short_phrases_nl import ak_characters, ak_robot_scene
 from gensim.models import word2vec, KeyedVectors
 import numpy as np
 from src.spot.pragmatic_model.detect_mentions import subtree_right_approach
@@ -50,10 +51,11 @@ class SimilarityScorer:
 
 class DisambiguatorStatus(Enum):
     AWAIT_NEXT = 1
-    SUCCESS = 2
-    NO_MATCH = 3
-    MATCH_MULTIPLE = 4
-    MATCH_PREVIOUS = 5
+    SUCCESS_HIGH = 2
+    SUCCESS_LOW = 3
+    NO_MATCH = 4
+    MATCH_MULTIPLE = 5
+    MATCH_PREVIOUS = 6
 
 
 class Disambiguator:
@@ -70,7 +72,7 @@ class Disambiguator:
     def status(self):
         return self._status.name
 
-    def advance_round(self, round_number=None, start=False, ):
+    def advance_round(self, round_number=None, start=False):
         self.current_round += 1
         if start:
             self.lexicon.compute_base_lexicon(self.world)
@@ -82,12 +84,14 @@ class Disambiguator:
         self.common_ground.current_position = 1
         self.common_ground.update_priors(self.scene_characters)
         self.common_ground.positions_discussed[str(round_number)] = {}
+        self.common_ground.reset_under_discussion()
 
         return self.lexicon.pragmatic_lexicon()
 
     def advance_position(self):
         self._status = DisambiguatorStatus.AWAIT_NEXT
         self.common_ground.current_position += 1
+        self.common_ground.reset_under_discussion()
 
     def confirm_character_position(self, selection, mention):
         position = self.scenes[str(self.current_round)][selection]
@@ -100,27 +104,52 @@ class Disambiguator:
 
         return position
 
-    def disambiguate(self, mention, approach='full', test=False, literal_threshold=0.48, history_threshold=0.80, split_size=3):
+    def disambiguate(self, mention, approach='full', use_history=True, test=False, literal_threshold=0.48,
+                     history_threshold=0.80, split_size=2, certainty_threshold=0.60):
+        """
+
+        :param mention:
+        :param approach:
+        :param use_history:
+        :param test:
+        :param literal_threshold:
+        :param history_threshold:
+        :param split_size:
+        :param certainty_threshold:
+        :return:
+        """
         mention.strip()
         mention.strip('.')
+
+        # check if repair or new input
+        if self.status() != 'AWAIT_NEXT':
+            mentions = self.common_ground.under_discussion['mention']
+            mentions.extend(mention)
+            mention = '. '.join(mentions)
+
+        # compute similarity scores with history and attributes
         history_score = self.mention_history_scoring(mention)
         literal_candidate_attributes, literal_candidate_scores = self.literal_match(mention, threshold=literal_threshold, split_size=split_size)
         for character, score in literal_candidate_scores.items():
             prior = self.common_ground.priors[character]
             literal_candidate_scores[character] *= prior
-        for character, scores in history_score.items():
-            for score in scores:
-                if score > history_threshold:
-                    literal_candidate_scores[character] += 0.1
+        if use_history:
+            for character, scores in history_score.items():
+                for score in scores:
+                    if score > history_threshold:
+                        literal_candidate_scores[character] += 0.1
         literal_candidate_scores = normalize(literal_candidate_scores)
         scores = np.array(list(literal_candidate_scores.values()))
         max_score = scores.max(initial=0)
         selected = '0'
 
+        # case: no match
         if max_score == 0.0:
             self._status = DisambiguatorStatus.NO_MATCH
-            return selected, 1.0, "No match found"
+            self.common_ground.add_under_discussion(mention)
+            return selected, 1.0, None, None
 
+        # find top candidate and compute certainty
         score_entropy = entropy(scores, base=2)
         certainty = 1-(score_entropy/math.log(5, 2))
         top_candidates = []
@@ -128,35 +157,52 @@ class Disambiguator:
             if score == max_score:
                 top_candidates.append(candidate)
 
+        # case: one top candidate
         if len(top_candidates) == 1:
             selected = top_candidates[0]
             if selected in self.common_ground.positions_discussed[str(self.current_round)].values():
                 self._status = DisambiguatorStatus.MATCH_PREVIOUS
                 if test:
                     position = self.confirm_character_position(selected, mention)
-                return selected, certainty, "Already discussed this round"
-            else:
-                self._status = DisambiguatorStatus.SUCCESS
-                position = self.confirm_character_position(selected, mention)
-                return selected, certainty, position
+                    return selected, certainty, position, None
 
+                # TODO add backtracking functionality based on certainty
+            else:
+                if certainty > certainty_threshold:
+                    self._status = DisambiguatorStatus.SUCCESS_HIGH
+                    position = self.confirm_character_position(selected, mention)
+                    return selected, certainty, position, None
+                else:
+                    self._status = DisambiguatorStatus.SUCCESS_LOW
+                    difference, selected = self.find_and_select_differences(self.scene_characters,
+                                                                            single_candidate=selected)
+                    position = self.confirm_character_position(selected, mention)
+                    self.common_ground.add_under_discussion(mention, selected)
+                    return selected, certainty, position, difference
+
+        # case: more than one top candidate
         if len(top_candidates) > 1:
             self._status = DisambiguatorStatus.MATCH_MULTIPLE
-            differences = self.find_differences(top_candidates)
             if approach == 'full':
                 top_candidate_attributes = {candidate: attributes for candidate, attributes
                                             in literal_candidate_attributes.items() if candidate in top_candidates}
                 pragmatic_match = self.contextual_pragmatic_match(top_candidate_attributes)
                 ordered = dict(sorted(pragmatic_match.items(), key=lambda item: item[1], reverse=True))
                 selected = next(iter(ordered))
+                difference, selected = self.find_and_select_differences(top_candidates, selected)
                 scores = np.array(list(ordered.values()))
                 score_entropy = entropy(scores, base=2)
                 certainty = 1-(score_entropy/math.log(len(ordered), 2))
                 position = self.confirm_character_position(selected, mention)
+            else:
+                difference, selected = self.find_and_select_differences(top_candidates)
+                position = self.confirm_character_position(selected, mention)
 
-            return selected, certainty, differences
+            self.common_ground.add_under_discussion(mention, selected)
 
-    def find_differences(self, candidates):
+            return selected, certainty, position, difference
+
+    def find_and_select_differences(self, candidates, single_candidate=None):
         unique_attributes = {candidate: [] for candidate in candidates}
         for attribute, characters in self.lexicon.base_lexicon().items():
             options = [character for character in characters if characters[character] == 1]
@@ -164,9 +210,16 @@ class Disambiguator:
             if len(overlap) == 1:
                 unique_attributes[overlap[0]].append(attribute)
 
-        return unique_attributes
+        if single_candidate:
+            candidate_guess = single_candidate
+            difference = random.choice(unique_attributes[single_candidate])
+        else:
+            candidate_guess = random.choice(candidates)
+            difference = random.choice(unique_attributes[candidate_guess])
 
-    def literal_match(self, mention, threshold=0.6, approach='nli', split_size=3):
+        return difference, candidate_guess
+
+    def literal_match(self, mention, threshold=0.6, approach='nli', split_size=2):
         # TODO make this compatible with all literal scoring approaches
         """
         compares the mention with descriptions for each character
@@ -236,6 +289,7 @@ class CommonGround:
         self.positions_discussed = {}
         self.priors = {}
         self.current_position = 1
+        self.under_discussion = {'mention': [], 'guess': None}
 
     def update_priors(self, characters, character_mentioned=None):
         if character_mentioned:
@@ -243,6 +297,14 @@ class CommonGround:
             self.priors = normalize(self.priors)
         else:
             self.priors = {character: 0.2 for character in characters}
+
+    def add_under_discussion(self, mention, guess=None):
+        if guess:
+            self.under_discussion['guess'] = guess
+        self.under_discussion['mention'].append(mention)
+
+    def reset_under_discussion(self):
+        self.under_discussion = {'mention': [], 'guess': None}
 
 
 class Lexicon:
