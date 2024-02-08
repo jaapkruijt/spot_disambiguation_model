@@ -1,10 +1,10 @@
 SHELL = /bin/bash
 
-project_dependencies ?= $(addprefix $(project_root)/, emissor cltl-knowledgerepresentation cltl-combot cltl-requirements)
+project_dependencies ?= $(addprefix $(project_root)/, emissor cltl-combot cltl-requirements)
 
 git_remote ?= https://github.com/leolani
 
-artifact_name = spot.disambiguation_model
+artifact_name = spot.disambiguation
 
 
 include util/make/makefile.base.mk

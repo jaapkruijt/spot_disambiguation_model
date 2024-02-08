@@ -7,7 +7,7 @@ with open("VERSION", "r") as fh:
     version = fh.read().strip()
 
 setup(
-    name="spot.disambiguation_model",
+    name="spot.disambiguation",
     description="Repository for disambiguating mentions used during the SPOT reference game",
     version=version,
     data_files=[('VERSION', ['VERSION'])],
@@ -25,10 +25,11 @@ setup(
     python_requires='>=3.7',
     install_requires=[
         'emissor',
-        'cltl.brain',
         "cltl.combot",
+        "gensim",
         "sentence_transformers",
         "spacy",
+        "thefuzz",
         "torch"
     ],
     extras_require={
