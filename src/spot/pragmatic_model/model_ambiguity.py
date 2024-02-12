@@ -88,9 +88,12 @@ class Disambiguator:
 
         return self.lexicon.pragmatic_lexicon()
 
-    def advance_position(self):
+    def advance_position(self, position=None):
         self._status = DisambiguatorStatus.AWAIT_NEXT
-        self.common_ground.current_position += 1
+        if position:
+            self.common_ground.current_position = position
+        else:
+            self.common_ground.current_position += 1
         self.common_ground.reset_under_discussion()
 
     def confirm_character_position(self, selection, mention):
@@ -104,19 +107,19 @@ class Disambiguator:
 
         return position
 
-    def disambiguate(self, mention, approach='full', use_history=True, test=False, literal_threshold=0.48,
+    def disambiguate(self, mention, approach='full', use_history=True, test=False, literal_threshold=0.6,
                      history_threshold=0.80, split_size=2, certainty_threshold=0.60):
         """
 
-        :param mention:
-        :param approach:
-        :param use_history:
-        :param test:
-        :param literal_threshold:
-        :param history_threshold:
-        :param split_size:
-        :param certainty_threshold:
-        :return:
+        :param mention: string
+        :param approach: 'full' or 'literal'
+        :param use_history: bool
+        :param test: bool
+        :param literal_threshold: float
+        :param history_threshold: float
+        :param split_size: int
+        :param certainty_threshold: float
+        :return: selection, certainty, position, difference
         """
         mention.strip()
         mention.strip('.')
@@ -217,6 +220,8 @@ class Disambiguator:
             candidate_guess = random.choice(candidates)
             difference = random.choice(unique_attributes[candidate_guess])
 
+        # TODO add case when there are no differences?
+
         return difference, candidate_guess
 
     def literal_match(self, mention, threshold=0.6, approach='nli', split_size=2):
@@ -270,6 +275,7 @@ class Disambiguator:
         return total
 
     def mention_history_scoring(self, mention):
+        # TODO check functionality and change approach
         mention_embedding = model.encode([mention], convert_to_tensor=True)
         previous_mention_score = {character: [] for character in self.scene_characters}
         for character, previous_mentions in self.common_ground.history.items():
