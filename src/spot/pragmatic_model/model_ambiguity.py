@@ -10,7 +10,7 @@ from sentence_transformers import SentenceTransformer, util
 from spot.pragmatic_model.world_short_phrases_nl import ak_characters, ak_robot_scene
 from gensim.models import word2vec, KeyedVectors
 import numpy as np
-from src.spot.pragmatic_model.detect_mentions import subtree_right_approach
+from spot.pragmatic_model.detect_mentions import subtree_right_approach
 from collections import Counter
 
 nlp = spacy.load('nl_core_news_lg')
