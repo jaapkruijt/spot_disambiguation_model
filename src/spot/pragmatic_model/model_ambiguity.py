@@ -1,5 +1,6 @@
 import math
 from enum import Enum
+import logging
 from scipy.stats import entropy
 import spacy
 import random
@@ -73,9 +74,12 @@ class Disambiguator:
         return self._status.name
 
     def advance_round(self, round_number=None, start=False):
-        self.current_round += 1
+        # TODO move confirmation to dialog manager
         if start:
             self.lexicon.compute_base_lexicon(self.world)
+        else:
+            self.confirm_character_position()
+        self.current_round += 1
         if not round_number:
             round_number = self.current_round
         self.scene_characters = list(self.scenes[str(round_number)].keys())
@@ -89,6 +93,8 @@ class Disambiguator:
         return self.lexicon.pragmatic_lexicon()
 
     def advance_position(self, position=None):
+        # TODO move confirmation to dialog manager
+        self.confirm_character_position()
         self._status = DisambiguatorStatus.AWAIT_NEXT
         if position:
             self.common_ground.current_position = position
@@ -96,8 +102,12 @@ class Disambiguator:
             self.common_ground.current_position += 1
         self.common_ground.reset_under_discussion()
 
-    def confirm_character_position(self, selection, mention):
-        position = self.scenes[str(self.current_round)][selection]
+    def confirm_character_position(self):
+        #TODO move this functionality to dialog manager when state.mention=None is solved
+        selection = self.common_ground.under_discussion['guess']
+        mention = '. '.join(self.common_ground.under_discussion['mention'])
+        logging.debug('Selection: %s', selection)
+        logging.debug('Mention added to history: %s', mention)
         if selection in self.common_ground.history.keys():
             self.common_ground.history[selection].append(mention)
         else:
@@ -105,7 +115,6 @@ class Disambiguator:
         self.common_ground.positions_discussed[str(self.current_round)][self.common_ground.current_position] = selection
         self.common_ground.update_priors(self.scene_characters, character_mentioned=selection)
 
-        return position
 
     def disambiguate(self, mention, approach='full', use_history=True, test=False, literal_threshold=0.6,
                      history_threshold=0.80, split_size=2, certainty_threshold=0.60):
@@ -123,12 +132,23 @@ class Disambiguator:
         """
         mention.strip()
         mention.strip('.')
+        logging.debug("Mention: %s", mention)
+        logging.debug("Status: %s", self.status())
 
-        # check if repair or new input
+        # check if repair, positive response or new input
         if self.status() != 'AWAIT_NEXT':
-            mentions = self.common_ground.under_discussion['mention']
-            mentions.extend(mention)
-            mention = '. '.join(mentions)
+            if self.status() == 'MATCH_MULTIPLE':
+                # TODO move to dialog manager
+                if 'ja' in mention.lower():
+                    self._status = DisambiguatorStatus.SUCCESS_HIGH
+                    selected = self.common_ground.under_discussion['guess']
+                    position = self.common_ground.under_discussion['position']
+
+                    return selected, 1.0, position, None
+            else:
+                mentions = self.common_ground.under_discussion['mention']
+                mentions.append(mention)
+                mention = '. '.join(mentions)
 
         # compute similarity scores with history and attributes
         history_score = self.mention_history_scoring(mention)
@@ -165,22 +185,24 @@ class Disambiguator:
             selected = top_candidates[0]
             if selected in self.common_ground.positions_discussed[str(self.current_round)].values():
                 self._status = DisambiguatorStatus.MATCH_PREVIOUS
-                if test:
-                    position = self.confirm_character_position(selected, mention)
-                    return selected, certainty, position, None
+
+                position = self.scenes[str(self.current_round)][selected]
+                self.common_ground.add_under_discussion(mention, selected, position)
+                return selected, certainty, position, None
 
                 # TODO add backtracking functionality based on certainty
             else:
                 if certainty > certainty_threshold:
                     self._status = DisambiguatorStatus.SUCCESS_HIGH
-                    position = self.confirm_character_position(selected, mention)
+                    position = self.scenes[str(self.current_round)][selected]
+                    self.common_ground.add_under_discussion(mention, selected, position)
                     return selected, certainty, position, None
                 else:
                     self._status = DisambiguatorStatus.SUCCESS_LOW
                     difference, selected = self.find_and_select_differences(self.scene_characters,
                                                                             single_candidate=selected)
-                    position = self.confirm_character_position(selected, mention)
-                    self.common_ground.add_under_discussion(mention, selected)
+                    position = self.scenes[str(self.current_round)][selected]
+                    self.common_ground.add_under_discussion(mention, selected, position)
                     return selected, certainty, position, difference
 
         # case: more than one top candidate
@@ -196,12 +218,12 @@ class Disambiguator:
                 scores = np.array(list(ordered.values()))
                 score_entropy = entropy(scores, base=2)
                 certainty = 1-(score_entropy/math.log(len(ordered), 2))
-                position = self.confirm_character_position(selected, mention)
+                position = self.scenes[str(self.current_round)][selected]
             else:
                 difference, selected = self.find_and_select_differences(top_candidates)
-                position = self.confirm_character_position(selected, mention)
+                position = self.scenes[str(self.current_round)][selected]
 
-            self.common_ground.add_under_discussion(mention, selected)
+            self.common_ground.add_under_discussion(mention, selected, position)
 
             return selected, certainty, position, difference
 
@@ -221,8 +243,10 @@ class Disambiguator:
             difference = random.choice(unique_attributes[candidate_guess])
 
         # TODO add case when there are no differences?
+        # TODO make sure attribute is not in original mention
+        # TODO add sex info as part of description
 
-        return difference, candidate_guess
+        return [difference], candidate_guess
 
     def literal_match(self, mention, threshold=0.6, approach='nli', split_size=2):
         # TODO make this compatible with all literal scoring approaches
@@ -239,6 +263,10 @@ class Disambiguator:
             mention_parts = split_on_window(mention, limit=split_size)
         else:
             mention_parts = [mention]
+        # log information about mention parts
+        for part in mention_parts:
+            logging.debug("Mention part: %s", part)
+        # score mention parts against attributes
         scoring = self.scorer.calculate_sentence_simscores(mention_parts, list(self.lexicon.base_lexicon().keys()))
         scoring = scoring.tolist()
         matches = []
@@ -248,6 +276,8 @@ class Disambiguator:
         for i, match in enumerate(matches):
             for score, attribute in match:
                 if score >= threshold:
+                    # TODO avoid multiple mention part matches?
+                    logging.debug("Found match for attribute %s", attribute)
                     mention_text[mention_parts[i]] = None
                     for character, value in self.lexicon.base_lexicon()[attribute].items():
                         if value == 1 and character in self.scene_characters:
@@ -281,6 +311,10 @@ class Disambiguator:
         for character, previous_mentions in self.common_ground.history.items():
             if character in self.scene_characters:
                 if previous_mentions:
+                    # logging information
+                    logging.debug("History for character: %s", character)
+                    for previous in previous_mentions:
+                        logging.debug("Previous mention: %s", previous)
                     prev_embeddings = model.encode(previous_mentions, convert_to_tensor=True)
                     cosine_scores = util.cos_sim(mention_embedding, prev_embeddings)
                     cosine_scores = cosine_scores.tolist()
@@ -295,7 +329,7 @@ class CommonGround:
         self.positions_discussed = {}
         self.priors = {}
         self.current_position = 1
-        self.under_discussion = {'mention': [], 'guess': None}
+        self.under_discussion = {'mention': [], 'guess': None, 'position': None}
 
     def update_priors(self, characters, character_mentioned=None):
         if character_mentioned:
@@ -304,13 +338,15 @@ class CommonGround:
         else:
             self.priors = {character: 0.2 for character in characters}
 
-    def add_under_discussion(self, mention, guess=None):
+    def add_under_discussion(self, mention, guess=None, position=None):
         if guess:
             self.under_discussion['guess'] = guess
+        if position:
+            self.under_discussion['position'] = position
         self.under_discussion['mention'].append(mention)
 
     def reset_under_discussion(self):
-        self.under_discussion = {'mention': [], 'guess': None}
+        self.under_discussion = {'mention': [], 'guess': None, 'position': None}
 
 
 class Lexicon:
