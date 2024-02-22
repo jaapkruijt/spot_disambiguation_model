@@ -37,7 +37,7 @@ def evaluate(utterance_data, use_gold_mention=False, filename=None, use_history=
                 current_utterance += text
                 continue
             else:
-                selection, certainty, aux = disambiguator.disambiguate(current_utterance, use_history=use_history,
+                selection, certainty, position, difference = disambiguator.disambiguate(current_utterance, use_history=use_history,
                                                                        approach=approach, literal_threshold=0.6,
                                                                        split_size=2)
                 status = disambiguator.status()
@@ -49,7 +49,7 @@ def evaluate(utterance_data, use_gold_mention=False, filename=None, use_history=
                 current_utterance += text
                 continue
             else:
-                selection, certainty, aux = disambiguator.disambiguate(text, use_history=use_history,
+                selection, certainty, position, difference = disambiguator.disambiguate(text, use_history=use_history,
                                                                        approach=approach, literal_threshold=0.6,
                                                                        split_size=2)
                 status = disambiguator.status()
@@ -84,10 +84,10 @@ def evaluate(utterance_data, use_gold_mention=False, filename=None, use_history=
     return results
 
 
-def evaluate_all_files(directory, average='micro', use_history=True, approach='full', use_gold_mention=True):
+def evaluate_all_files(participant_list, path, average='micro', use_history=True, approach='full', use_gold_mention=True):
     scores = {'precision': {}, 'status': {}, 'recall': {}, 'f1': {}, 'avg_certainty': {}}
-    for participant in os.listdir(directory):
-        datafile = os.path.join(directory, participant)
+    for participant in participant_list:
+        datafile = os.path.join(path, participant)
         df = read_gold_mentions(datafile)
         result = evaluate(df, use_gold_mention=use_gold_mention, filename=participant, use_history=use_history,
                           approach=approach)
@@ -112,7 +112,6 @@ def evaluate_all_files(directory, average='micro', use_history=True, approach='f
 
 
 
-
 if __name__ == '__main__':
     # dataframe = read_gold_mentions('/Users/jaapkruijt/Documents/GitHub/spot_disambiguation_model/local_files/test_files/AK_41.tsv')
     # res = evaluate(dataframe, use_gold_mention=False)
@@ -120,9 +119,9 @@ if __name__ == '__main__':
     # print(precision_score(res['true'], res['pred'], average='micro'))
     # print(recall_score(res['true'], res['pred'], average='micro'))
     filepath = '/Users/jaapkruijt/Documents/GitHub/spot_disambiguation_model/local_files/test_files'
+    pp_list = os.listdir(filepath)
     all_results = []
-    full_micro = evaluate_all_files(filepath, use_gold_mention=False)
-    participants = list(full_micro['precision'].keys())
+    participants = [os.path.splitext(pp)[0] for pp in pp_list]
     participants_doubled = list(zip(participants, participants))
     participants_new = list(sum(participants_doubled, ()))
     precision_recall = ['precision', 'recall']*10
@@ -134,10 +133,14 @@ if __name__ == '__main__':
                {'avg': 'micro', 'history': False, 'approach': 'literal'}, {'avg': 'macro', 'history': False, 'approach': 'literal'}]
 
     for config in configs:
-        results = evaluate_all_files(filepath, use_gold_mention=False, average=config['avg'],
+        results = evaluate_all_files(pp_list, filepath, use_gold_mention=True, average=config['avg'],
                                      use_history=config['history'], approach=config['approach'])
         prec_rec = list(sum(list(zip(results['precision'].values(), results['recall'].values())), ()))
         all_results.append(prec_rec)
+
+    df = pd.DataFrame(all_results, columns=index)
+    print(tabulate(df, headers='keys'))
+    df.to_csv('test_mention_21022024.csv.csv')
 
 
 

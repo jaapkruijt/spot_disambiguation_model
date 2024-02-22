@@ -57,6 +57,7 @@ class DisambiguatorStatus(Enum):
     NO_MATCH = 4
     MATCH_MULTIPLE = 5
     MATCH_PREVIOUS = 6
+    NEG_RESPONSE = 7
 
 
 class Disambiguator:
@@ -74,7 +75,7 @@ class Disambiguator:
         return self._status.name
 
     def advance_round(self, round_number=None, start=False):
-        # TODO move confirmation to dialog manager
+        # TODO move decision to dialog manager
         if start:
             self.lexicon.compute_base_lexicon(self.world)
         else:
@@ -93,7 +94,7 @@ class Disambiguator:
         return self.lexicon.pragmatic_lexicon()
 
     def advance_position(self, position=None):
-        # TODO move confirmation to dialog manager
+        # TODO move decision to dialog manager
         self.confirm_character_position()
         self._status = DisambiguatorStatus.AWAIT_NEXT
         if position:
@@ -138,7 +139,7 @@ class Disambiguator:
         # check if repair, positive response or new input
         if self.status() != 'AWAIT_NEXT':
             if self.status() == 'MATCH_MULTIPLE':
-                # TODO move to dialog manager
+                # TODO move to dialog manager?
                 if 'ja' in mention.lower():
                     self._status = DisambiguatorStatus.SUCCESS_HIGH
                     selected = self.common_ground.under_discussion['guess']
@@ -168,12 +169,17 @@ class Disambiguator:
 
         # case: no match
         if max_score == 0.0:
+            if 'nee' in mention.lower():
+                # TODO is this best approach?
+                self._status = DisambiguatorStatus.NEG_RESPONSE
+                return selected, 1.0, None, None
             self._status = DisambiguatorStatus.NO_MATCH
             self.common_ground.add_under_discussion(mention)
             return selected, 1.0, None, None
 
         # find top candidate and compute certainty
         score_entropy = entropy(scores, base=2)
+        # TODO check certainty/entropy
         certainty = 1-(score_entropy/math.log(5, 2))
         top_candidates = []
         for candidate, score in literal_candidate_scores.items():
@@ -237,12 +243,19 @@ class Disambiguator:
 
         if single_candidate:
             candidate_guess = single_candidate
-            difference = random.choice(unique_attributes[single_candidate])
+            if unique_attributes[single_candidate]:
+                difference = random.choice(unique_attributes[single_candidate])
+            else:
+                difference = None
+                # TODO add case when there are no differences
         else:
             candidate_guess = random.choice(candidates)
-            difference = random.choice(unique_attributes[candidate_guess])
+            if unique_attributes[candidate_guess]:
+                difference = random.choice(unique_attributes[candidate_guess])
+            else:
+                difference = None
+                # TODO add case when there are no differences
 
-        # TODO add case when there are no differences?
         # TODO make sure attribute is not in original mention
         # TODO add sex info as part of description
 
@@ -257,8 +270,10 @@ class Disambiguator:
         :param approach: string
         :return: scores for each mention_character pair
         """
+        # create dictionaries
         candidate_attributes = {character: set() for character in self.scene_characters}
         candidate_scores = {character: 0 for character in self.scene_characters}
+        # create mention chunks of size 'split_size' using sliding window
         if len(mention.split()) >= split_size:
             mention_parts = split_on_window(mention, limit=split_size)
         else:
@@ -277,12 +292,14 @@ class Disambiguator:
             for score, attribute in match:
                 if score >= threshold:
                     # TODO avoid multiple mention part matches?
-                    logging.debug("Found match for attribute %s", attribute)
                     mention_text[mention_parts[i]] = None
                     for character, value in self.lexicon.base_lexicon()[attribute].items():
                         if value == 1 and character in self.scene_characters:
-                            candidate_attributes[character].add(attribute)
-                            candidate_scores[character] += score
+                            # avoid multiple mentions
+                            if attribute not in candidate_attributes[character]:
+                                logging.debug("Found match for attribute %s for character %s", attribute, character)
+                                candidate_attributes[character].add(attribute)
+                                candidate_scores[character] += score
 
         candidate_scores = normalize(candidate_scores)
 
@@ -321,7 +338,6 @@ class Disambiguator:
                     previous_mention_score[character] = [score[0] for score in cosine_scores]
 
         return previous_mention_score
-
 
 class CommonGround:
     def __init__(self):
