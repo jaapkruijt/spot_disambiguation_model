@@ -2,6 +2,7 @@ import math
 from enum import Enum
 import logging
 from scipy.stats import entropy
+from scipy.special import rel_entr
 import spacy
 import random
 from random import choice
@@ -116,8 +117,7 @@ class Disambiguator:
         self.common_ground.positions_discussed[str(self.current_round)][self.common_ground.current_position] = selection
         self.common_ground.update_priors(self.scene_characters, character_mentioned=selection)
 
-
-    def disambiguate(self, mention, approach='full', use_history=True, test=False, literal_threshold=0.6,
+    def disambiguate(self, mention, approach='full', use_history=True, test=False, literal_threshold=0.7,
                      history_threshold=0.80, split_size=2, certainty_threshold=0.60):
         """
 
@@ -137,23 +137,25 @@ class Disambiguator:
         logging.debug("Status: %s", self.status())
 
         # check if repair, positive response or new input
-        if self.status() != 'AWAIT_NEXT':
-            if self.status() == 'MATCH_MULTIPLE':
-                # TODO move to dialog manager?
-                if 'ja' in mention.lower():
-                    self._status = DisambiguatorStatus.SUCCESS_HIGH
-                    selected = self.common_ground.under_discussion['guess']
-                    position = self.common_ground.under_discussion['position']
+        if self.status() == 'MATCH_MULTIPLE':
+           # TODO move to dialog manager?
+            if 'ja' in mention.lower():
+                self._status = DisambiguatorStatus.SUCCESS_HIGH
+                selected = self.common_ground.under_discussion['guess']
+                position = self.common_ground.under_discussion['position']
 
-                    return selected, 1.0, position, None
-            else:
-                mentions = self.common_ground.under_discussion['mention']
-                mentions.append(mention)
-                mention = '. '.join(mentions)
+                return selected, 1.0, position, None
+        elif self.status() == 'NO_MATCH':
+            # TODO make previous mentions less important
+            mentions = self.common_ground.under_discussion['mention']
+            mentions.append(mention)
+            mention = '. '.join(mentions)
 
         # compute similarity scores with history and attributes
         history_score = self.mention_history_scoring(mention)
         literal_candidate_attributes, literal_candidate_scores = self.literal_match(mention, threshold=literal_threshold, split_size=split_size)
+        for character, attributes in literal_candidate_attributes.items():
+            logging.debug("Attributes for character %s: %s", character, attributes)
         for character, score in literal_candidate_scores.items():
             prior = self.common_ground.priors[character]
             literal_candidate_scores[character] *= prior
@@ -164,6 +166,7 @@ class Disambiguator:
                         literal_candidate_scores[character] += 0.1
         literal_candidate_scores = normalize(literal_candidate_scores)
         scores = np.array(list(literal_candidate_scores.values()))
+        logging.debug("Score distribution: %s", scores)
         max_score = scores.max(initial=0)
         selected = '0'
 
@@ -178,9 +181,15 @@ class Disambiguator:
             return selected, 1.0, None, None
 
         # find top candidate and compute certainty
-        score_entropy = entropy(scores, base=2)
-        # TODO check certainty/entropy
-        certainty = 1-(score_entropy/math.log(5, 2))
+        # uniform = uniform = np.random.uniform(size=len(scores))
+        uniform = [1/len(scores)]*len(scores)
+        logging.debug("Uniform distribution: %s", uniform)
+        certainty = sum(rel_entr(scores, uniform))/math.log(len(scores))
+        logging.debug("Certainty according to KL: %s", certainty)
+        # score_entropy = entropy(scores, base=2)
+        # logging.debug("Score entropy: %s", score_entropy)
+        # TODO check certainty/entropy: try KL divergence?
+        # certainty = 1-(score_entropy/math.log(5, 2))
         top_candidates = []
         for candidate, score in literal_candidate_scores.items():
             if score == max_score:
@@ -219,11 +228,16 @@ class Disambiguator:
                                             in literal_candidate_attributes.items() if candidate in top_candidates}
                 pragmatic_match = self.contextual_pragmatic_match(top_candidate_attributes)
                 ordered = dict(sorted(pragmatic_match.items(), key=lambda item: item[1], reverse=True))
+                logging.debug("Ordered dict: %s", ordered)
                 selected = next(iter(ordered))
+                logging.debug('Selected character: %s', selected)
                 difference, selected = self.find_and_select_differences(top_candidates, selected)
                 scores = np.array(list(ordered.values()))
-                score_entropy = entropy(scores, base=2)
-                certainty = 1-(score_entropy/math.log(len(ordered), 2))
+                uniform = np.random.uniform(size=len(scores))
+                logging.debug("Uniform distribution: %s", uniform)
+                certainty = rel_entr(scores, uniform)
+                # score_entropy = entropy(scores, base=2)
+                # certainty = 1-(score_entropy/math.log(len(ordered), 2))
                 position = self.scenes[str(self.current_round)][selected]
             else:
                 difference, selected = self.find_and_select_differences(top_candidates)
@@ -244,16 +258,21 @@ class Disambiguator:
         if single_candidate:
             candidate_guess = single_candidate
             if unique_attributes[single_candidate]:
+                logging.debug("Unique features: %s", unique_attributes[single_candidate])
                 difference = random.choice(unique_attributes[single_candidate])
             else:
                 difference = None
+                logging.debug("No unique features found")
                 # TODO add case when there are no differences
         else:
             candidate_guess = random.choice(candidates)
+            logging.debug("Random guess: %s", candidate_guess)
             if unique_attributes[candidate_guess]:
+                logging.debug("Unique features for guess: %s", unique_attributes[candidate_guess])
                 difference = random.choice(unique_attributes[candidate_guess])
             else:
                 difference = None
+                logging.debug("No differences found")
                 # TODO add case when there are no differences
 
         # TODO make sure attribute is not in original mention
@@ -291,13 +310,14 @@ class Disambiguator:
         for i, match in enumerate(matches):
             for score, attribute in match:
                 if score >= threshold:
+                    logging.debug("Match for mention part %s with %s, score: %s", mention_parts[i], attribute, score)
                     # TODO avoid multiple mention part matches?
                     mention_text[mention_parts[i]] = None
                     for character, value in self.lexicon.base_lexicon()[attribute].items():
                         if value == 1 and character in self.scene_characters:
                             # avoid multiple mentions
                             if attribute not in candidate_attributes[character]:
-                                logging.debug("Found match for attribute %s for character %s", attribute, character)
+                                # logging.debug("Found match for attribute %s for character %s", attribute, character)
                                 candidate_attributes[character].add(attribute)
                                 candidate_scores[character] += score
 
@@ -322,7 +342,8 @@ class Disambiguator:
         return total
 
     def mention_history_scoring(self, mention):
-        # TODO check functionality and change approach
+        # TODO internal convention strength: number of rounds + internal sim score
+        # TODO rate internal strength of convention against match with current mention
         mention_embedding = model.encode([mention], convert_to_tensor=True)
         previous_mention_score = {character: [] for character in self.scene_characters}
         for character, previous_mentions in self.common_ground.history.items():
@@ -335,9 +356,26 @@ class Disambiguator:
                     prev_embeddings = model.encode(previous_mentions, convert_to_tensor=True)
                     cosine_scores = util.cos_sim(mention_embedding, prev_embeddings)
                     cosine_scores = cosine_scores.tolist()
-                    previous_mention_score[character] = [score[0] for score in cosine_scores]
+                    previous_mention_score[character] = [score[-1] for score in cosine_scores]
+                    logging.debug("history score for character %s: %s", character, previous_mention_score)
 
         return previous_mention_score
+
+    def format_difference(self, sex, difference):
+        if difference in ['jong', 'oud']:
+            phrase = f"die {difference}e {sex}"
+        elif difference == 'kaal':
+            phrase = f"die kale {sex}"
+        elif difference == 'stijl':
+            phrase = f"die {sex} met stijl haar"
+        elif difference in ['man', 'vrouw', 'jongen']:
+            phrase = f"die {difference}"
+        elif difference == 'kind':
+            phrase = "dat kind"
+        else:
+            phrase = f"die {sex} met {difference}"
+
+        return phrase
 
 class CommonGround:
     def __init__(self):
