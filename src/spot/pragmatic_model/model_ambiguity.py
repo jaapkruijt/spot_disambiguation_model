@@ -15,7 +15,7 @@ import numpy as np
 from spot.pragmatic_model.detect_mentions import subtree_right_approach
 from collections import Counter
 
-nlp = spacy.load('nl_core_news_lg')
+# nlp = spacy.load('nl_core_news_lg')
 model = SentenceTransformer('distiluse-base-multilingual-cased-v1')
 filename = '/Users/jaapkruijt/Documents/GitHub/spot_disambiguation_model/local_files/nlwiki_20180420_300d.txt'
 # wiki2vec = KeyedVectors.load_word2vec_format(filename)
@@ -78,7 +78,7 @@ class Disambiguator:
     def advance_round(self, round_number=None, start=False):
         # TODO move decision to dialog manager
         if start:
-            self.lexicon.compute_base_lexicon(self.world)
+            self.lexicon.compute_base_lexicon(list(self.world.values()))
         else:
             self.confirm_character_position()
         self.current_round += 1
@@ -106,7 +106,7 @@ class Disambiguator:
 
     def confirm_character_position(self):
         #TODO move this functionality to dialog manager when state.mention=None is solved
-        selection = self.common_ground.under_discussion['guess']
+        selection = self.common_ground.under_discussion['guess'][-1]
         mention = '. '.join(self.common_ground.under_discussion['mention'])
         logging.debug('Selection: %s', selection)
         logging.debug('Mention added to history: %s', mention)
@@ -141,15 +141,15 @@ class Disambiguator:
            # TODO move to dialog manager?
             if 'ja' in mention.lower():
                 self._status = DisambiguatorStatus.SUCCESS_HIGH
-                selected = self.common_ground.under_discussion['guess']
-                position = self.common_ground.under_discussion['position']
+                selected = self.common_ground.under_discussion['guess'][-1]
+                position = self.common_ground.under_discussion['position'][-1]
 
                 return selected, 1.0, position, None
-        elif self.status() == 'NO_MATCH':
-            # TODO make previous mentions less important
-            mentions = self.common_ground.under_discussion['mention']
-            mentions.append(mention)
-            mention = '. '.join(mentions)
+        # elif self.status() == 'NO_MATCH':
+        #     # TODO make previous mentions less important
+        #     mentions = self.common_ground.under_discussion['mention']
+        #     mentions.append(mention)
+        #     mention = '. '.join(mentions)
 
         # compute similarity scores with history and attributes
         history_score = self.mention_history_scoring(mention)
@@ -163,7 +163,13 @@ class Disambiguator:
             for character, scores in history_score.items():
                 for score in scores:
                     if score > history_threshold:
+                        # TODO refine approach
                         literal_candidate_scores[character] += 0.1
+        # lower probability for original guess in case of negative feedback
+        if self.status() in ['MATCH_PREVIOUS', 'MATCH_PREVIOUS', 'SUCCESS_LOW']:
+            # TODO check if too thorough: can lead to negative values
+            for previous_guess in self.common_ground.under_discussion['guess']:
+                literal_candidate_scores[previous_guess] -= 0.1
         literal_candidate_scores = normalize(literal_candidate_scores)
         scores = np.array(list(literal_candidate_scores.values()))
         logging.debug("Score distribution: %s", scores)
@@ -211,14 +217,16 @@ class Disambiguator:
                     self._status = DisambiguatorStatus.SUCCESS_HIGH
                     position = self.scenes[str(self.current_round)][selected]
                     self.common_ground.add_under_discussion(mention, selected, position)
-                    return selected, certainty, position, None
+                    response = self.format_response_phrase(self.world[selected]['gender'],
+                                                           random.choice(list(literal_candidate_attributes[selected])))
+                    return selected, certainty, position, response
                 else:
                     self._status = DisambiguatorStatus.SUCCESS_LOW
-                    difference, selected = self.find_and_select_differences(self.scene_characters,
-                                                                            single_candidate=selected)
+                    response, selected = self.find_and_select_differences(self.scene_characters,
+                                                                          single_candidate=selected)
                     position = self.scenes[str(self.current_round)][selected]
                     self.common_ground.add_under_discussion(mention, selected, position)
-                    return selected, certainty, position, difference
+                    return selected, certainty, position, response
 
         # case: more than one top candidate
         if len(top_candidates) > 1:
@@ -231,7 +239,7 @@ class Disambiguator:
                 logging.debug("Ordered dict: %s", ordered)
                 selected = next(iter(ordered))
                 logging.debug('Selected character: %s', selected)
-                difference, selected = self.find_and_select_differences(top_candidates, selected)
+                response, selected = self.find_and_select_differences(top_candidates, single_candidate=selected)
                 scores = np.array(list(ordered.values()))
                 uniform = np.random.uniform(size=len(scores))
                 logging.debug("Uniform distribution: %s", uniform)
@@ -240,12 +248,12 @@ class Disambiguator:
                 # certainty = 1-(score_entropy/math.log(len(ordered), 2))
                 position = self.scenes[str(self.current_round)][selected]
             else:
-                difference, selected = self.find_and_select_differences(top_candidates)
+                response, selected = self.find_and_select_differences(top_candidates)
                 position = self.scenes[str(self.current_round)][selected]
 
             self.common_ground.add_under_discussion(mention, selected, position)
 
-            return selected, certainty, position, difference
+            return selected, certainty, position, response
 
     def find_and_select_differences(self, candidates, single_candidate=None):
         unique_attributes = {candidate: [] for candidate in candidates}
@@ -261,9 +269,10 @@ class Disambiguator:
                 logging.debug("Unique features: %s", unique_attributes[single_candidate])
                 difference = random.choice(unique_attributes[single_candidate])
             else:
-                difference = None
+                attribute_options = [attribute for feature, attribute in self.world[candidate_guess].items()
+                                     if feature != 'gender']
+                difference = random.choice(attribute_options)
                 logging.debug("No unique features found")
-                # TODO add case when there are no differences
         else:
             candidate_guess = random.choice(candidates)
             logging.debug("Random guess: %s", candidate_guess)
@@ -271,14 +280,17 @@ class Disambiguator:
                 logging.debug("Unique features for guess: %s", unique_attributes[candidate_guess])
                 difference = random.choice(unique_attributes[candidate_guess])
             else:
-                difference = None
+                attribute_options = [attribute for feature, attribute in self.world[candidate_guess].items()
+                                     if feature != 'gender']
+                difference = random.choice(attribute_options)
                 logging.debug("No differences found")
-                # TODO add case when there are no differences
+
+        phrase = self.format_response_phrase(self.world[candidate_guess]['gender'], difference)
 
         # TODO make sure attribute is not in original mention
         # TODO add sex info as part of description
 
-        return [difference], candidate_guess
+        return phrase, candidate_guess
 
     def literal_match(self, mention, threshold=0.6, approach='nli', split_size=2):
         # TODO make this compatible with all literal scoring approaches
@@ -361,7 +373,7 @@ class Disambiguator:
 
         return previous_mention_score
 
-    def format_difference(self, sex, difference):
+    def format_response_phrase(self, sex, difference):
         if difference in ['jong', 'oud']:
             phrase = f"die {difference}e {sex}"
         elif difference == 'kaal':
@@ -383,7 +395,7 @@ class CommonGround:
         self.positions_discussed = {}
         self.priors = {}
         self.current_position = 1
-        self.under_discussion = {'mention': [], 'guess': None, 'position': None}
+        self.under_discussion = {'mention': [], 'guess': [], 'position': []}
 
     def update_priors(self, characters, character_mentioned=None):
         if character_mentioned:
@@ -394,13 +406,13 @@ class CommonGround:
 
     def add_under_discussion(self, mention, guess=None, position=None):
         if guess:
-            self.under_discussion['guess'] = guess
+            self.under_discussion['guess'].append(guess)
         if position:
-            self.under_discussion['position'] = position
+            self.under_discussion['position'].append(position)
         self.under_discussion['mention'].append(mention)
 
     def reset_under_discussion(self):
-        self.under_discussion = {'mention': [], 'guess': None, 'position': None}
+        self.under_discussion = {'mention': [], 'guess': [], 'position': []}
 
 
 class Lexicon:

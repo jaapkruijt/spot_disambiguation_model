@@ -28,7 +28,8 @@ ak14 = {'gender': 'man', 'age': 'jong', 'hair_style': 'kuif',
 ak15 = {'gender': 'man', 'hair_style': 'kort haar',
         'hair_color': 'zwart haar', 'hair_type': 'stekels'}
 
-ak_characters = [ak1, ak2, ak3, ak4, ak5, ak6, ak7, ak8, ak9, ak10, ak11, ak12, ak13, ak14, ak15]
+ak_characters = {'1': ak1, '2': ak2, '3': ak3, '4': ak4, '5': ak5, '6': ak6, '7': ak7,
+                 '8': ak8, '9': ak9, '10': ak10, '11': ak11, '12': ak12, '13': ak13, '14': ak14, '15': ak15}
 # ak_characters_rounds = {'1': [ak1, ak2, ak3, ak10, ak14], '2': [ak1, ak2, ak3, ak12, ak4], '3': [ak1, ak2, ak3, ak8, ak9],
 #                  '4': [ak1, ak2, ak3, ak6, ak15], '5': [ak1, ak2, ak3, ak13, ak11], '6': [ak1, ak2, ak3, ak7, ak5]}
 ak_robot_scene = {'1': {'1': '2', '2': '1', '3': '3', '10': '5', '14': '4'},
