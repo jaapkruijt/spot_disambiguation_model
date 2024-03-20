@@ -16,7 +16,7 @@ from spot.pragmatic_model.detect_mentions import subtree_right_approach
 from collections import Counter
 
 # nlp = spacy.load('nl_core_news_lg')
-model = SentenceTransformer('distiluse-base-multilingual-cased-v1')
+# model = SentenceTransformer('distiluse-base-multilingual-cased-v1')
 filename = '/Users/jaapkruijt/Documents/GitHub/spot_disambiguation_model/local_files/nlwiki_20180420_300d.txt'
 # wiki2vec = KeyedVectors.load_word2vec_format(filename)
 entity_mention_history = {}
@@ -25,13 +25,16 @@ recencies = {str(i+1): 0 for i in range(len(ak_characters))}
 
 
 class SimilarityScorer:
+    def __init__(self, model_name='distiluse-base-multilingual-cased-v1'):
+        self.model = SentenceTransformer(model_name)
+
     def calculate_sentence_simscores(self, source: list, descriptions: list):
         """
         Compare one list of strings against another string using cosine similarity measure
         :return: similarity score for each pair
         """
-        source_embeddings = model.encode(source)
-        description_embedding = model.encode(descriptions)
+        source_embeddings = self.model.encode(source)
+        description_embedding = self.model.encode(descriptions)
         cosine_scores = util.cos_sim(source_embeddings, description_embedding)
 
         return cosine_scores
@@ -76,7 +79,6 @@ class Disambiguator:
         return self._status.name
 
     def advance_round(self, round_number=None, start=False):
-        # TODO move decision to dialog manager
         if start:
             self.lexicon.compute_base_lexicon(list(self.world.values()))
         else:
@@ -95,7 +97,6 @@ class Disambiguator:
         return self.lexicon.pragmatic_lexicon()
 
     def advance_position(self, position=None):
-        # TODO move decision to dialog manager
         self.confirm_character_position()
         self._status = DisambiguatorStatus.AWAIT_NEXT
         if position:
@@ -105,9 +106,9 @@ class Disambiguator:
         self.common_ground.reset_under_discussion()
 
     def confirm_character_position(self):
-        #TODO move this functionality to dialog manager when state.mention=None is solved
         selection = self.common_ground.under_discussion['guess'][-1]
-        mention = '. '.join(self.common_ground.under_discussion['mention'])
+        # mention = '. '.join(self.common_ground.under_discussion['mention'])
+        mention = self.common_ground.under_discussion['mention'][-1]
         logging.debug('Selection: %s', selection)
         logging.debug('Mention added to history: %s', mention)
         if selection in self.common_ground.history.keys():
@@ -144,7 +145,7 @@ class Disambiguator:
                 selected = self.common_ground.under_discussion['guess'][-1]
                 position = self.common_ground.under_discussion['position'][-1]
 
-                return selected, 1.0, position, None
+                return selected, 1.0, int(position), None
         # elif self.status() == 'NO_MATCH':
         #     # TODO make previous mentions less important
         #     mentions = self.common_ground.under_discussion['mention']
@@ -167,9 +168,11 @@ class Disambiguator:
                         literal_candidate_scores[character] += 0.1
         # lower probability for original guess in case of negative feedback
         if self.status() in ['MATCH_PREVIOUS', 'MATCH_PREVIOUS', 'SUCCESS_LOW']:
-            # TODO check if too thorough: can lead to negative values
+            # TODO check if too thorough
             for previous_guess in self.common_ground.under_discussion['guess']:
                 literal_candidate_scores[previous_guess] -= 0.1
+                if literal_candidate_scores[previous_guess] < 0.0:
+                    literal_candidate_scores[previous_guess] = 0.0
         literal_candidate_scores = normalize(literal_candidate_scores)
         scores = np.array(list(literal_candidate_scores.values()))
         logging.debug("Score distribution: %s", scores)
@@ -209,24 +212,23 @@ class Disambiguator:
 
                 position = self.scenes[str(self.current_round)][selected]
                 self.common_ground.add_under_discussion(mention, selected, position)
-                return selected, certainty, position, None
-
-                # TODO add backtracking functionality based on certainty
+                return selected, certainty, int(position), None
             else:
                 if certainty > certainty_threshold:
                     self._status = DisambiguatorStatus.SUCCESS_HIGH
                     position = self.scenes[str(self.current_round)][selected]
                     self.common_ground.add_under_discussion(mention, selected, position)
+                    # TODO breaks here if only match from history
                     response = self.format_response_phrase(self.world[selected]['gender'],
                                                            random.choice(list(literal_candidate_attributes[selected])))
-                    return selected, certainty, position, response
+                    return selected, certainty, int(position), response
                 else:
                     self._status = DisambiguatorStatus.SUCCESS_LOW
                     response, selected = self.find_and_select_differences(self.scene_characters,
                                                                           single_candidate=selected)
                     position = self.scenes[str(self.current_round)][selected]
                     self.common_ground.add_under_discussion(mention, selected, position)
-                    return selected, certainty, position, response
+                    return selected, certainty, int(position), response
 
         # case: more than one top candidate
         if len(top_candidates) > 1:
@@ -253,7 +255,7 @@ class Disambiguator:
 
             self.common_ground.add_under_discussion(mention, selected, position)
 
-            return selected, certainty, position, response
+            return selected, certainty, int(position), response
 
     def find_and_select_differences(self, candidates, single_candidate=None):
         unique_attributes = {candidate: [] for candidate in candidates}
@@ -286,9 +288,6 @@ class Disambiguator:
                 logging.debug("No differences found")
 
         phrase = self.format_response_phrase(self.world[candidate_guess]['gender'], difference)
-
-        # TODO make sure attribute is not in original mention
-        # TODO add sex info as part of description
 
         return phrase, candidate_guess
 
@@ -323,7 +322,6 @@ class Disambiguator:
             for score, attribute in match:
                 if score >= threshold:
                     logging.debug("Match for mention part %s with %s, score: %s", mention_parts[i], attribute, score)
-                    # TODO avoid multiple mention part matches?
                     mention_text[mention_parts[i]] = None
                     for character, value in self.lexicon.base_lexicon()[attribute].items():
                         if value == 1 and character in self.scene_characters:
@@ -356,7 +354,7 @@ class Disambiguator:
     def mention_history_scoring(self, mention):
         # TODO internal convention strength: number of rounds + internal sim score
         # TODO rate internal strength of convention against match with current mention
-        mention_embedding = model.encode([mention], convert_to_tensor=True)
+        mention_embedding = self.scorer.model.encode([mention], convert_to_tensor=True)
         previous_mention_score = {character: [] for character in self.scene_characters}
         for character, previous_mentions in self.common_ground.history.items():
             if character in self.scene_characters:
@@ -365,7 +363,7 @@ class Disambiguator:
                     logging.debug("History for character: %s", character)
                     for previous in previous_mentions:
                         logging.debug("Previous mention: %s", previous)
-                    prev_embeddings = model.encode(previous_mentions, convert_to_tensor=True)
+                    prev_embeddings = self.scorer.model.encode(previous_mentions, convert_to_tensor=True)
                     cosine_scores = util.cos_sim(mention_embedding, prev_embeddings)
                     cosine_scores = cosine_scores.tolist()
                     previous_mention_score[character] = [score[-1] for score in cosine_scores]
@@ -391,6 +389,8 @@ class Disambiguator:
 
 class CommonGround:
     def __init__(self):
+        # TODO store history as json at end of each round/end of interaction
+        # TODO and load information at start of subsequent interaction
         self.history = {}
         self.positions_discussed = {}
         self.priors = {}
