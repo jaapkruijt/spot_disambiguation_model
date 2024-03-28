@@ -12,12 +12,13 @@ from sentence_transformers import SentenceTransformer, util
 from spot.pragmatic_model.world_short_phrases_nl import ak_characters, ak_robot_scene
 from gensim.models import word2vec, KeyedVectors
 import numpy as np
+import json
 from spot.pragmatic_model.detect_mentions import subtree_right_approach
 from collections import Counter
 
 # nlp = spacy.load('nl_core_news_lg')
 # model = SentenceTransformer('distiluse-base-multilingual-cased-v1')
-filename = '/Users/jaapkruijt/Documents/GitHub/spot_disambiguation_model/local_files/nlwiki_20180420_300d.txt'
+w2vfile = '/Users/jaapkruijt/Documents/GitHub/spot_disambiguation_model/local_files/nlwiki_20180420_300d.txt'
 # wiki2vec = KeyedVectors.load_word2vec_format(filename)
 entity_mention_history = {}
 entity_history = []
@@ -65,7 +66,7 @@ class DisambiguatorStatus(Enum):
 
 
 class Disambiguator:
-    def __init__(self, world, scenes):
+    def __init__(self, world, scenes, high_engagement=bool):
         self._status = DisambiguatorStatus.AWAIT_NEXT
         self.common_ground = CommonGround()
         self.lexicon = Lexicon()
@@ -74,6 +75,7 @@ class Disambiguator:
         self.scenes = scenes
         self.scene_characters = []
         self.current_round = 0
+        self.high_engagement = high_engagement
 
     def status(self):
         return self._status.name
@@ -107,14 +109,21 @@ class Disambiguator:
 
     def confirm_character_position(self):
         selection = self.common_ground.under_discussion['guess'][-1]
-        # mention = '. '.join(self.common_ground.under_discussion['mention'])
         mention = self.common_ground.under_discussion['mention'][-1]
         logging.debug('Selection: %s', selection)
         logging.debug('Mention added to history: %s', mention)
         if selection in self.common_ground.history.keys():
-            self.common_ground.history[selection].append(mention)
+            self.common_ground.history[selection]['human'].append(mention)
         else:
-            self.common_ground.history[selection] = [mention]
+            self.common_ground.history[selection] = {'human': [mention]}
+        # TODO do we want to add the robot response to mention history?
+        if self.high_engagement:
+            response = self.common_ground.under_discussion['response'][-1]
+            if response:
+                if 'robot' in self.common_ground.history[selection].keys():
+                    self.common_ground.history[selection]['robot'].append(response)
+                else:
+                    self.common_ground.history[selection]['robot'] = [response]
         self.common_ground.positions_discussed[str(self.current_round)][self.common_ground.current_position] = selection
         self.common_ground.update_priors(self.scene_characters, character_mentioned=selection)
 
@@ -139,21 +148,15 @@ class Disambiguator:
 
         # check if repair, positive response or new input
         if self.status() == 'MATCH_MULTIPLE':
-           # TODO move to dialog manager?
             if 'ja' in mention.lower():
                 self._status = DisambiguatorStatus.SUCCESS_HIGH
                 selected = self.common_ground.under_discussion['guess'][-1]
                 position = self.common_ground.under_discussion['position'][-1]
 
                 return selected, 1.0, int(position), None
-        # elif self.status() == 'NO_MATCH':
-        #     # TODO make previous mentions less important
-        #     mentions = self.common_ground.under_discussion['mention']
-        #     mentions.append(mention)
-        #     mention = '. '.join(mentions)
 
         # compute similarity scores with history and attributes
-        history_score = self.mention_history_scoring(mention)
+        history_score = self.mention_history_scoring(mention, history_threshold)
         literal_candidate_attributes, literal_candidate_scores = self.literal_match(mention, threshold=literal_threshold, split_size=split_size)
         for character, attributes in literal_candidate_attributes.items():
             logging.debug("Attributes for character %s: %s", character, attributes)
@@ -182,7 +185,6 @@ class Disambiguator:
         # case: no match
         if max_score == 0.0:
             if 'nee' in mention.lower():
-                # TODO is this best approach?
                 self._status = DisambiguatorStatus.NEG_RESPONSE
                 return selected, 1.0, None, None
             self._status = DisambiguatorStatus.NO_MATCH
@@ -217,17 +219,17 @@ class Disambiguator:
                 if certainty > certainty_threshold:
                     self._status = DisambiguatorStatus.SUCCESS_HIGH
                     position = self.scenes[str(self.current_round)][selected]
-                    self.common_ground.add_under_discussion(mention, selected, position)
                     # TODO breaks here if only match from history
                     response = self.format_response_phrase(self.world[selected]['gender'],
                                                            random.choice(list(literal_candidate_attributes[selected])))
+                    self.common_ground.add_under_discussion(mention, selected, position, response)
                     return selected, certainty, int(position), response
                 else:
                     self._status = DisambiguatorStatus.SUCCESS_LOW
                     response, selected = self.find_and_select_differences(self.scene_characters,
                                                                           single_candidate=selected)
                     position = self.scenes[str(self.current_round)][selected]
-                    self.common_ground.add_under_discussion(mention, selected, position)
+                    self.common_ground.add_under_discussion(mention, selected, position, response)
                     return selected, certainty, int(position), response
 
         # case: more than one top candidate
@@ -243,9 +245,9 @@ class Disambiguator:
                 logging.debug('Selected character: %s', selected)
                 response, selected = self.find_and_select_differences(top_candidates, single_candidate=selected)
                 scores = np.array(list(ordered.values()))
-                uniform = np.random.uniform(size=len(scores))
+                uniform = [1/len(scores)]*len(scores)
                 logging.debug("Uniform distribution: %s", uniform)
-                certainty = rel_entr(scores, uniform)
+                certainty = sum(rel_entr(scores, uniform))/math.log(len(scores))
                 # score_entropy = entropy(scores, base=2)
                 # certainty = 1-(score_entropy/math.log(len(ordered), 2))
                 position = self.scenes[str(self.current_round)][selected]
@@ -253,7 +255,7 @@ class Disambiguator:
                 response, selected = self.find_and_select_differences(top_candidates)
                 position = self.scenes[str(self.current_round)][selected]
 
-            self.common_ground.add_under_discussion(mention, selected, position)
+            self.common_ground.add_under_discussion(mention, selected, position, response)
 
             return selected, certainty, int(position), response
 
@@ -351,22 +353,35 @@ class Disambiguator:
 
         return total
 
-    def mention_history_scoring(self, mention):
+    def mention_history_scoring(self, mention, history_threshold=0.8):
         # TODO internal convention strength: number of rounds + internal sim score
         # TODO rate internal strength of convention against match with current mention
         mention_embedding = self.scorer.model.encode([mention], convert_to_tensor=True)
         previous_mention_score = {character: [] for character in self.scene_characters}
-        for character, previous_mentions in self.common_ground.history.items():
+        for character, history in self.common_ground.history.items():
             if character in self.scene_characters:
-                if previous_mentions:
+                if history:
+                    try:
+                        # previous_mentions = list(sum(list(zip(history['human'], history['robot']))))
+                        previous_mentions = history['human'] + history['robot']
+                    except KeyError:
+                        previous_mentions = history['human']
                     # logging information
                     logging.debug("History for character: %s", character)
                     for previous in previous_mentions:
                         logging.debug("Previous mention: %s", previous)
+                    mention_freq = len(previous_mentions)
                     prev_embeddings = self.scorer.model.encode(previous_mentions, convert_to_tensor=True)
-                    cosine_scores = util.cos_sim(mention_embedding, prev_embeddings)
-                    cosine_scores = cosine_scores.tolist()
-                    previous_mention_score[character] = [score[-1] for score in cosine_scores]
+                    strength_scores = util.cos_sim(prev_embeddings, prev_embeddings)
+                    strength_avg = torch.mean(strength_scores).item()
+                    history_scores = util.cos_sim(mention_embedding, prev_embeddings)
+                    recency_weight = torch.tensor()
+                    history_scores = history_scores.tolist()
+                    history_top = [score for score in history_scores if score >= history_threshold]
+                    # history_avg = torch.mean(history_scores).item()
+                    # cosine_scores = cosine_scores.tolist()
+                    # previous_mention_score[character] = [score[-1] for score in cosine_scores]
+                    previous_mention_score[character] = history_score
                     logging.debug("history score for character %s: %s", character, previous_mention_score)
 
         return previous_mention_score
@@ -387,6 +402,16 @@ class Disambiguator:
 
         return phrase
 
+    def save_interaction(self, participant, interaction):
+        with open(f'interactions/pp_{participant}_int{interaction}_history.json') as filename:
+            json.dump(self.common_ground.history, filename)
+
+    def load_interaction(self, participant, interaction):
+        with open(f'interactions/pp_{participant}_int{interaction}_history.json') as filename:
+            self.common_ground.history = json.load(filename)
+
+
+
 class CommonGround:
     def __init__(self):
         # TODO store history as json at end of each round/end of interaction
@@ -395,7 +420,7 @@ class CommonGround:
         self.positions_discussed = {}
         self.priors = {}
         self.current_position = 1
-        self.under_discussion = {'mention': [], 'guess': [], 'position': []}
+        self.under_discussion = {'mention': [], 'guess': [], 'position': [], 'response': []}
 
     def update_priors(self, characters, character_mentioned=None):
         if character_mentioned:
@@ -404,15 +429,17 @@ class CommonGround:
         else:
             self.priors = {character: 0.2 for character in characters}
 
-    def add_under_discussion(self, mention, guess=None, position=None):
+    def add_under_discussion(self, mention, guess=None, position=None, response=None):
         if guess:
             self.under_discussion['guess'].append(guess)
         if position:
             self.under_discussion['position'].append(position)
         self.under_discussion['mention'].append(mention)
+        if response:
+            self.under_discussion['response'].append(response)
 
     def reset_under_discussion(self):
-        self.under_discussion = {'mention': [], 'guess': [], 'position': []}
+        self.under_discussion = {'mention': [], 'guess': [], 'position': [], 'response': []}
 
 
 class Lexicon:
