@@ -8,23 +8,32 @@ nlp = spacy.load('nl_core_news_lg')
 
 def subtree_right_approach(utterance):
     mention_list = []
+    optional_left_list = []
     doc = nlp(utterance)
     for token in doc:
         subject_mentioned = False
         if token.head.text == token.text:
             if token.pos_ == 'NOUN':
-                mention_list.append(token.text)
-                subject_mentioned = True
-            for child in token.rights:
-                if child.dep_ == 'nsubj':
+                if token.text.lower() != 'ik':
+                    # mention_list.append(token.text)
                     subject_mentioned = True
-                if not subject_mentioned:
-                    continue
-                else:
-                    for t in child.subtree:
+                    for t in token.subtree:
                         mention_list.append(t.text)
+            else:
+                for child in token.rights:
+                    if child.dep_ == 'nsubj':
+                        subject_mentioned = True
+                    if not subject_mentioned:
+                        continue
+                    else:
+                        for t in child.subtree:
+                            mention_list.append(t.text)
 
     mention = ' '.join(mention_list)
+
+    if optional_left_list:
+        lefts = ' '.join(optional_left_list)
+        mention = lefts + ' ' + mention
 
     return mention
 
@@ -44,7 +53,7 @@ def nsubj_approach(utterance):
 
 
 if __name__ == "__main__":
-    mention = 'En daarnaast staat een mevrouw met een beetje boblijn.'
+    mention = 'dat is een kale man met een baard'
     result = subtree_right_approach(mention)
     result2 = nsubj_approach(mention)
     print(result)

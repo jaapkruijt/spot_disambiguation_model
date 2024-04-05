@@ -1,6 +1,7 @@
 from spot.pragmatic_model.model_ambiguity import Disambiguator, DisambiguatorStatus
 from test_world import test_scene, test_phrases, introductions, correct
 from spot.pragmatic_model.world_short_phrases_nl import ak_characters
+from spot.pragmatic_model.detect_mentions import subtree_right_approach
 from datetime import datetime
 import logging
 import random
@@ -15,6 +16,10 @@ def test_disambiguator(disambiguator, use_intro=False):
             phrase = phrase_intro + ' ' + phrase
         logging.debug("---- ROUND %s -----", disambiguator.current_round)
         logging.debug("--- POSITION %s ----", current_pos)
+        logging.debug("Phrase: %s", phrase)
+        # mention = subtree_right_approach(phrase)
+        # if not mention:
+        #     mention = phrase
         selection, certainty, position, difference = disambiguator.disambiguate(phrase)
         status = disambiguator.status()
         logging.debug("Disambiguator status: %s", status)
@@ -33,12 +38,13 @@ def test_disambiguator(disambiguator, use_intro=False):
         # attribute matches
         # history score per character
         # list of differences
-        disambiguator.advance_position()
         current_pos += 1
         if current_pos > 4:
             if not j == len(test_phrases)-1:
                 disambiguator.advance_round()
                 current_pos = 1
+        else:
+            disambiguator.advance_position()
 
 
 if __name__ == "__main__":
@@ -48,7 +54,7 @@ if __name__ == "__main__":
                         datefmt='%Y-%m-%d %H:%M:%S',
     )
 
-    disambiguator = Disambiguator(ak_characters, test_scene)
+    disambiguator = Disambiguator(ak_characters, test_scene, high_engagement=False)
 
-    test_disambiguator(disambiguator)
+    test_disambiguator(disambiguator, use_intro=True)
 

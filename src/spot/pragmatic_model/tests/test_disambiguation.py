@@ -8,28 +8,27 @@ from sklearn.metrics import f1_score, precision_score, recall_score
 from tabulate import tabulate
 from collections import Counter
 from statistics import mean
+from spot.pragmatic_model.detect_mentions import subtree_right_approach
 
 def read_gold_mentions(filepath):
     df = pd.read_csv(filepath, sep='\t')
     df = df.loc[(df['speaker'] == 'human') & (df['mention'].notna()) & (df['round'] != 0) &
                 (df['tu_relation'] != 'summarization')]
     df = df.reset_index()
-    df['previous'] = df['round'].shift(1)
+    df['next'] = df['round'].shift(-1)
     df['next_tu'] = df['tu_relation'].shift(-1)
 
     return df
 
 
-def evaluate(utterance_data, use_gold_mention=False, filename=None, use_history=True, approach='full'):
+def evaluate(utterance_data, use_gold_mention=False, filename=None, history_factor=1.0, approach='full', mention_det=False):
     selections = []
     # results = {'tp': 0, 'fp': 0, 'fn': 0, 'certainty': [], 'status': []}
     results = {'pred': [], 'true': [], 'certainty': [], 'status': []}
-    disambiguator = Disambiguator(ak_characters, ak_robot_scene)
+    disambiguator = Disambiguator(ak_characters, ak_robot_scene, high_engagement=False)
     disambiguator.advance_round(start=True)
     current_utterance = ''
     for index, row in utterance_data.iterrows():
-        if not math.isnan(row['previous']) and row['previous'] != row['round']:
-            disambiguator.advance_round()
         text = row['mention'] if use_gold_mention else row['text']
         gold = row['character']
         if current_utterance:
@@ -37,24 +36,42 @@ def evaluate(utterance_data, use_gold_mention=False, filename=None, use_history=
                 current_utterance += text
                 continue
             else:
-                selection, certainty, position, difference = disambiguator.disambiguate(current_utterance, use_history=use_history,
-                                                                       approach=approach, literal_threshold=0.6,
+                if mention_det:
+                    mention = subtree_right_approach(current_utterance)
+                    if not mention:
+                        mention = current_utterance
+                else:
+                    mention = current_utterance
+                selection, certainty, position, response = disambiguator.disambiguate(mention, history_factor=history_factor,
+                                                                       approach=approach, literal_threshold=0.7,
                                                                        split_size=2)
                 status = disambiguator.status()
-                selections.append((selection, certainty, gold, status, current_utterance))
+                selections.append((selection, certainty, gold, status, mention))
                 current_utterance = ''
-                disambiguator.advance_position()
+                if not math.isnan(row['next']) and row['next'] != row['round']:
+                    disambiguator.advance_round()
+                else:
+                    disambiguator.advance_position()
         else:
             if row['next_tu'] == 'continue-description':
                 current_utterance += text
                 continue
             else:
-                selection, certainty, position, difference = disambiguator.disambiguate(text, use_history=use_history,
-                                                                       approach=approach, literal_threshold=0.6,
+                if mention_det:
+                    mention = subtree_right_approach(text)
+                    if not mention:
+                        mention = text
+                else:
+                    mention = text
+                selection, certainty, position, difference = disambiguator.disambiguate(mention, history_factor=history_factor,
+                                                                       approach=approach, literal_threshold=0.7,
                                                                        split_size=2)
                 status = disambiguator.status()
-                selections.append((selection, certainty, gold, status, text))
-                disambiguator.advance_position()
+                selections.append((selection, certainty, gold, status, mention))
+                if not math.isnan(row['next']) and row['next'] != row['round']:
+                    disambiguator.advance_round()
+                else:
+                    disambiguator.advance_position()
         # print(disambiguator.common_ground.positions_discussed)
         # print(disambiguator.common_ground.priors)
         # print(disambiguator.common_ground.history)
@@ -84,13 +101,14 @@ def evaluate(utterance_data, use_gold_mention=False, filename=None, use_history=
     return results
 
 
-def evaluate_all_files(participant_list, path, average='micro', use_history=True, approach='full', use_gold_mention=True):
+def evaluate_all_files(participant_list, path, average='micro', history_factor=1.0, approach='full',
+                       use_gold_mention=True, mention_det=False):
     scores = {'precision': {}, 'status': {}, 'recall': {}, 'f1': {}, 'avg_certainty': {}}
     for participant in participant_list:
         datafile = os.path.join(path, participant)
         df = read_gold_mentions(datafile)
-        result = evaluate(df, use_gold_mention=use_gold_mention, filename=participant, use_history=use_history,
-                          approach=approach)
+        result = evaluate(df, use_gold_mention=use_gold_mention, filename=participant, history_factor=history_factor,
+                          approach=approach, mention_det=mention_det)
         # precision = result['tp']/(result['tp']+result['fp'])
         # recall = result['tp']/(result['tp']+result['fn'])
         # f1 = 2*((precision*recall)/(precision+recall))
@@ -127,20 +145,20 @@ if __name__ == '__main__':
     precision_recall = ['precision', 'recall']*10
     tuples = list(zip(participants_new, precision_recall))
     index = pd.MultiIndex.from_tuples(tuples)
-    configs = [{'avg': 'micro', 'history': True, 'approach': 'full'}, {'avg': 'macro', 'history': True, 'approach': 'full'},
-               {'avg': 'micro', 'history': True, 'approach': 'literal'}, {'avg': 'macro', 'history': True, 'approach': 'literal'},
-               {'avg': 'micro', 'history': False, 'approach': 'full'}, {'avg': 'macro', 'history': False, 'approach': 'full'},
-               {'avg': 'micro', 'history': False, 'approach': 'literal'}, {'avg': 'macro', 'history': False, 'approach': 'literal'}]
+    configs = [{'avg': 'micro', 'history': 1.0, 'approach': 'full'}, {'avg': 'macro', 'history': 1.0, 'approach': 'full'},
+               {'avg': 'micro', 'history': 1.0, 'approach': 'literal'}, {'avg': 'macro', 'history': 1.0, 'approach': 'literal'},
+               {'avg': 'micro', 'history': 0.0, 'approach': 'full'}, {'avg': 'macro', 'history': 0.0, 'approach': 'full'},
+               {'avg': 'micro', 'history': 0.0, 'approach': 'literal'}, {'avg': 'macro', 'history': 0.0, 'approach': 'literal'}]
 
     for config in configs:
-        results = evaluate_all_files(pp_list, filepath, use_gold_mention=True, average=config['avg'],
-                                     use_history=config['history'], approach=config['approach'])
+        results = evaluate_all_files(pp_list, filepath, use_gold_mention=False, average=config['avg'],
+                                     history_factor=config['history'], approach=config['approach'], mention_det=False)
         prec_rec = list(sum(list(zip(results['precision'].values(), results['recall'].values())), ()))
         all_results.append(prec_rec)
 
     df = pd.DataFrame(all_results, columns=index)
     print(tabulate(df, headers='keys'))
-    df.to_csv('test_mention_21022024.csv.csv')
+    df.to_csv('test_nomention_04042024.csv')
 
 
 

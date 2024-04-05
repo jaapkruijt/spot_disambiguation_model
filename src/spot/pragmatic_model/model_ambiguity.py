@@ -3,6 +3,7 @@ from enum import Enum
 import logging
 from scipy.stats import entropy
 from scipy.special import rel_entr
+from sklearn.feature_extraction.text import TfidfVectorizer
 import spacy
 import random
 from random import choice
@@ -13,6 +14,8 @@ from spot.pragmatic_model.world_short_phrases_nl import ak_characters, ak_robot_
 from gensim.models import word2vec, KeyedVectors
 import numpy as np
 import json
+import os
+from difflib import SequenceMatcher
 from spot.pragmatic_model.detect_mentions import subtree_right_approach
 from collections import Counter
 
@@ -56,6 +59,9 @@ class SimilarityScorer:
 
 
 class DisambiguatorStatus(Enum):
+    '''
+    Output status of the disambiguator after disambigation. Determines the next action for the dialog manager
+    '''
     AWAIT_NEXT = 1
     SUCCESS_HIGH = 2
     SUCCESS_LOW = 3
@@ -67,6 +73,15 @@ class DisambiguatorStatus(Enum):
 
 class Disambiguator:
     def __init__(self, world, scenes, high_engagement=bool):
+        '''
+        Initialize the disambiguator with a closed game world consisting of scenes and positions of characters in the
+        scenes, and visual information about the characters. Sets the current round to 0, and initializes the Common
+        Ground, Lexicon and Similarity Scorer associated with the disambiguator.
+        :param world: dict. Contains visual information about the characters
+        :param scenes: dict. Contains a dict of characters and their positions per round.
+        :param high_engagement: Bool. If True, the robot engages in convention formation by using mentions. If False,
+        the robot does not use mentions other than 'die'/'that one'
+        '''
         self._status = DisambiguatorStatus.AWAIT_NEXT
         self.common_ground = CommonGround()
         self.lexicon = Lexicon()
@@ -78,9 +93,22 @@ class Disambiguator:
         self.high_engagement = high_engagement
 
     def status(self):
+        '''
+        Returns the name of the current DisambiguatorStatus
+        :return: str
+        '''
         return self._status.name
 
     def advance_round(self, round_number=None, start=False):
+        '''
+        Called to move the disambiguator to the next round in the game. Updates the round number, scene characters,
+        pragmatic lexicon, status and common ground information
+        :param round_number: Optional. If a round number is supplied, the disambiguator moves to that round.
+        If not supplied the disambiguator moves up one round from the current round
+        :param start: Bool. If True, the base lexicon is additionally updated (only happens once at the start). If
+        False, the information for the last character discussed is added to the common ground.
+        :return:
+        '''
         if start:
             self.lexicon.compute_base_lexicon(list(self.world.values()))
         else:
@@ -96,9 +124,17 @@ class Disambiguator:
         self.common_ground.positions_discussed[str(round_number)] = {}
         self.common_ground.reset_under_discussion()
 
+        # TODO should not return anything, check!
         return self.lexicon.pragmatic_lexicon()
 
     def advance_position(self, position=None):
+        '''
+        Called to move the disambiguator to the next position in a round. Updates the disambiguator status and
+        adds information for the last character discussed to the common ground
+        :param position: Optional. If a position is supplied, the disambiguator moves to that position in the round.
+        If not supplied, moves up one position from the current.
+        :return: NA
+        '''
         self.confirm_character_position()
         self._status = DisambiguatorStatus.AWAIT_NEXT
         if position:
@@ -108,7 +144,19 @@ class Disambiguator:
         self.common_ground.reset_under_discussion()
 
     def confirm_character_position(self):
-        selection = self.common_ground.under_discussion['guess'][-1]
+        '''
+        After (optional) confirmation from the disambiguator, adds the following information for the selected character
+        to the common ground: selected character id, mention used by the human, mention used by the robot (only if
+        high_engagement is True), the selected character's position in the human view. Also updates the prior
+        probability for the selected character to reflect that they have already been discussed this round.
+
+        :return: NA
+        '''
+        # COMMENTED OUT PARTS FOR TESTING ONLY
+        try:
+            selection = self.common_ground.under_discussion['guess'][-1]
+        except IndexError:
+            selection = '0'
         mention = self.common_ground.under_discussion['mention'][-1]
         logging.debug('Selection: %s', selection)
         logging.debug('Mention added to history: %s', mention)
@@ -127,10 +175,13 @@ class Disambiguator:
         self.common_ground.positions_discussed[str(self.current_round)][self.common_ground.current_position] = selection
         self.common_ground.update_priors(self.scene_characters, character_mentioned=selection)
 
-    def disambiguate(self, mention, approach='full', use_history=True, test=False, literal_threshold=0.7,
-                     history_threshold=0.80, split_size=2, certainty_threshold=0.60):
+    def disambiguate(self, mention, approach='full', history_factor=1.0, test=False, literal_threshold=0.7,
+                     history_threshold=0.60, split_size=2, certainty_threshold=0.60):
         """
-
+        Main function of the disambiguator used to identify a character based on a description. First checks its status
+        to determine whether repair is necessary. Combines a literal cosine-similarity-based score with a score based on
+        information from the history of mentions to determine the most likely referent. Its next action and result
+        depend on the distribution of the likelihood scores.
         :param mention: string
         :param approach: 'full' or 'literal'
         :param use_history: bool
@@ -141,34 +192,46 @@ class Disambiguator:
         :param certainty_threshold: float
         :return: selection, certainty, position, difference
         """
+        # Strip the mention of any leading or trailing spaces and punctuation
         mention.strip()
+        # TODO regex to strip all punctuation
         mention.strip('.')
         logging.debug("Mention: %s", mention)
         logging.debug("Status: %s", self.status())
 
-        # check if repair, positive response or new input
+        # check if coming from repair, positive response or new input
         if self.status() == 'MATCH_MULTIPLE':
             if 'ja' in mention.lower():
                 self._status = DisambiguatorStatus.SUCCESS_HIGH
                 selected = self.common_ground.under_discussion['guess'][-1]
                 position = self.common_ground.under_discussion['position'][-1]
+                response = self.common_ground.under_discussion['response'][-1]
 
-                return selected, 1.0, int(position), None
+                return selected, 1.0, int(position), response
 
-        # compute similarity scores with history and attributes
+        # compute similarity scores with history
         history_score = self.mention_history_scoring(mention, history_threshold)
+
+        # compute similarity scores with attributes
         literal_candidate_attributes, literal_candidate_scores = self.literal_match(mention, threshold=literal_threshold, split_size=split_size)
         for character, attributes in literal_candidate_attributes.items():
             logging.debug("Attributes for character %s: %s", character, attributes)
+        logging.debug("Scores before history: %s", literal_candidate_scores)
+
+        # combine literal score and history score through weighted averaging
+        for character, (score, weight) in history_score.items():
+            literal_candidate_scores[character] = np.average(np.array([literal_candidate_scores[character], score]),
+                                                             weights=np.array([1.0, weight*history_factor]))
+        logging.debug("Scores after history scoring: %s", literal_candidate_scores)
+
+        # update the prior probability for each character
         for character, score in literal_candidate_scores.items():
-            prior = self.common_ground.priors[character]
-            literal_candidate_scores[character] *= prior
-        if use_history:
-            for character, scores in history_score.items():
-                for score in scores:
-                    if score > history_threshold:
-                        # TODO refine approach
-                        literal_candidate_scores[character] += 0.1
+            literal_candidate_scores[character] *= self.common_ground.priors[character]
+        # TODO can we do it with lists/arrays like below?
+        # literal_scores = [literal_candidate_scores[character]*self.common_ground.priors[character]
+        #                   for character in literal_candidate_scores.keys()]
+        logging.debug("Scores after prior: %s", literal_candidate_scores)
+
         # lower probability for original guess in case of negative feedback
         if self.status() in ['MATCH_PREVIOUS', 'MATCH_PREVIOUS', 'SUCCESS_LOW']:
             # TODO check if too thorough
@@ -176,15 +239,17 @@ class Disambiguator:
                 literal_candidate_scores[previous_guess] -= 0.1
                 if literal_candidate_scores[previous_guess] < 0.0:
                     literal_candidate_scores[previous_guess] = 0.0
+
+        # normalize scores to get distribution summing to one
         literal_candidate_scores = normalize(literal_candidate_scores)
         scores = np.array(list(literal_candidate_scores.values()))
         logging.debug("Score distribution: %s", scores)
         max_score = scores.max(initial=0)
         selected = '0'
 
-        # case: no match
+        # In case no match was found
         if max_score == 0.0:
-            if 'nee' in mention.lower():
+            if 'nee ' in mention.lower():
                 self._status = DisambiguatorStatus.NEG_RESPONSE
                 return selected, 1.0, None, None
             self._status = DisambiguatorStatus.NO_MATCH
@@ -219,9 +284,12 @@ class Disambiguator:
                 if certainty > certainty_threshold:
                     self._status = DisambiguatorStatus.SUCCESS_HIGH
                     position = self.scenes[str(self.current_round)][selected]
-                    # TODO breaks here if only match from history
-                    response = self.format_response_phrase(self.world[selected]['gender'],
-                                                           random.choice(list(literal_candidate_attributes[selected])))
+                    # TODO change response from history!!
+                    if selected in self.common_ground.history.keys():
+                        response = random.choice(self.common_ground.history[selected]['human'])
+                    else:
+                        response = self.format_response_phrase(self.world[selected]['gender'],
+                                                               random.choice(list(literal_candidate_attributes[selected])))
                     self.common_ground.add_under_discussion(mention, selected, position, response)
                     return selected, certainty, int(position), response
                 else:
@@ -323,13 +391,13 @@ class Disambiguator:
         for i, match in enumerate(matches):
             for score, attribute in match:
                 if score >= threshold:
-                    logging.debug("Match for mention part %s with %s, score: %s", mention_parts[i], attribute, score)
+                    # logging.debug("Match for mention part %s with %s, score: %s", mention_parts[i], attribute, score)
                     mention_text[mention_parts[i]] = None
                     for character, value in self.lexicon.base_lexicon()[attribute].items():
                         if value == 1 and character in self.scene_characters:
                             # avoid multiple mentions
                             if attribute not in candidate_attributes[character]:
-                                # logging.debug("Found match for attribute %s for character %s", attribute, character)
+                                logging.debug("Found match for attribute %s for character %s", attribute, character)
                                 candidate_attributes[character].add(attribute)
                                 candidate_scores[character] += score
 
@@ -353,17 +421,18 @@ class Disambiguator:
 
         return total
 
+
     def mention_history_scoring(self, mention, history_threshold=0.8):
         # TODO internal convention strength: number of rounds + internal sim score
         # TODO rate internal strength of convention against match with current mention
         mention_embedding = self.scorer.model.encode([mention], convert_to_tensor=True)
-        previous_mention_score = {character: [] for character in self.scene_characters}
+        previous_mention_score = {character: (0.0, 0.0) for character in self.scene_characters}
         for character, history in self.common_ground.history.items():
             if character in self.scene_characters:
                 if history:
                     try:
-                        # previous_mentions = list(sum(list(zip(history['human'], history['robot']))))
-                        previous_mentions = history['human'] + history['robot']
+                        previous_mentions = list(sum(list(zip(history['human'], history['robot'])), ()))
+                        # previous_mentions = history['human'] + history['robot']
                     except KeyError:
                         previous_mentions = history['human']
                     # logging information
@@ -373,18 +442,44 @@ class Disambiguator:
                     mention_freq = len(previous_mentions)
                     prev_embeddings = self.scorer.model.encode(previous_mentions, convert_to_tensor=True)
                     strength_scores = util.cos_sim(prev_embeddings, prev_embeddings)
-                    strength_avg = torch.mean(strength_scores).item()
-                    history_scores = util.cos_sim(mention_embedding, prev_embeddings)
-                    recency_weight = torch.tensor()
+                    # TODO does it make sense that strength is high when only one mention in history?
+                    strength_avg = torch.mean(torch.flatten(strength_scores)).item()
+                    logging.debug("Average history strength: %s", strength_avg)
+                    cosine_scores = util.cos_sim(mention_embedding, prev_embeddings)
+                    cosine_scores = torch.flatten(cosine_scores)
+                    logging.debug("Flattened cosine scores: %s", cosine_scores)
+                    # cosine_scores = torch.mul(cosine_scores, strength_avg)
+                    cosine_scores = cosine_scores.to('cpu')
+                    # logging.debug("Cosine scores mutiplied by weight: %s", cosine_scores)
+                    seq_matches = []
+                    seq = SequenceMatcher()
+                    seq.set_seq2(mention)
+                    for previous in previous_mentions:
+                        seq.set_seq1(previous)
+                        match = seq.find_longest_match()
+                        logging.debug("Longest match info for history %s: %s", previous, match)
+                        match_ratio = seq.ratio()
+                        logging.debug("Match ratio for history %s: %s", previous, match_ratio)
+                        seq_matches.append(match_ratio)
+                    seq_scores = torch.tensor(seq_matches).to('cpu')
+                    history_scores = cosine_scores*seq_scores
+                    logging.debug("Combined score: %s", history_scores)
+                    recency_weights = torch.tensor([1/i for i in range(len(history_scores), 0, -1)])
+                    logging.debug("Recency for history: %s", recency_weights)
+                    history_scores = history_scores*recency_weights
+                    logging.debug("Combined scores weighed by recency: %s", history_scores)
+                    # history_scores = torch.nn.functional.normalize(history_scores, dim=0)
                     history_scores = history_scores.tolist()
-                    history_top = [score for score in history_scores if score >= history_threshold]
-                    # history_avg = torch.mean(history_scores).item()
-                    # cosine_scores = cosine_scores.tolist()
-                    # previous_mention_score[character] = [score[-1] for score in cosine_scores]
-                    previous_mention_score[character] = history_score
-                    logging.debug("history score for character %s: %s", character, previous_mention_score)
+                    history_score = sum(history_scores)
+                    previous_mention_score[character] = (history_score, strength_avg)
+                    logging.debug("Avg history score for character %s: %s", character, previous_mention_score)
 
         return previous_mention_score
+
+    def find_preferred_convention(self, character):
+        for character, history in self.common_ground.history:
+            pass
+
 
     def format_response_phrase(self, sex, difference):
         if difference in ['jong', 'oud']:
@@ -403,11 +498,13 @@ class Disambiguator:
         return phrase
 
     def save_interaction(self, participant, interaction):
-        with open(f'interactions/pp_{participant}_int{interaction}_history.json') as filename:
-            json.dump(self.common_ground.history, filename)
+        path = '/Users/jaapkruijt/Documents/GitHub/spot-woz-parent/spot-woz/py-app/storage/conventions'
+        with open(os.path.join(path, f'pp_{participant}_int{interaction}_history.json')) as fname:
+            json.dump(self.common_ground.history, fname)
 
     def load_interaction(self, participant, interaction):
-        with open(f'interactions/pp_{participant}_int{interaction}_history.json') as filename:
+        path = '/Users/jaapkruijt/Documents/GitHub/spot-woz-parent/spot-woz/py-app/storage/conventions'
+        with open(os.path.join(path, f'pp_{participant}_int{interaction}_history.json')) as filename:
             self.common_ground.history = json.load(filename)
 
 
@@ -421,6 +518,7 @@ class CommonGround:
         self.priors = {}
         self.current_position = 1
         self.under_discussion = {'mention': [], 'guess': [], 'position': [], 'response': []}
+        self.preferred_convention = {}
 
     def update_priors(self, characters, character_mentioned=None):
         if character_mentioned:
