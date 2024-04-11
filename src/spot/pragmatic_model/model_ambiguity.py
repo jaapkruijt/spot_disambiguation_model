@@ -16,6 +16,8 @@ import numpy as np
 import json
 import os
 from difflib import SequenceMatcher
+import pandas as pd
+from tqdm import tqdm
 from spot.pragmatic_model.detect_mentions import subtree_right_approach
 from collections import Counter
 
@@ -91,6 +93,8 @@ class Disambiguator:
         self.scene_characters = []
         self.current_round = 0
         self.high_engagement = high_engagement
+        self.vectorizer = TfidfVectorizer()
+        self.nlp = spacy.load('nl_core_news_lg')
 
     def status(self):
         '''
@@ -113,6 +117,7 @@ class Disambiguator:
             self.lexicon.compute_base_lexicon(list(self.world.values()))
         else:
             self.confirm_character_position()
+            self.find_preferred_conventions()
         self.current_round += 1
         if not round_number:
             round_number = self.current_round
@@ -152,11 +157,10 @@ class Disambiguator:
 
         :return: NA
         '''
-        # COMMENTED OUT PARTS FOR TESTING ONLY
-        try:
+        try:  # THIS LINE FOR TESTING ONLY
             selection = self.common_ground.under_discussion['guess'][-1]
-        except IndexError:
-            selection = '0'
+        except IndexError:  # THIS LINE FOR TESTING ONLY
+            selection = '0'  # THIS LINE FOR TESTING ONLY
         mention = self.common_ground.under_discussion['mention'][-1]
         logging.debug('Selection: %s', selection)
         logging.debug('Mention added to history: %s', mention)
@@ -242,9 +246,14 @@ class Disambiguator:
 
         # normalize scores to get distribution summing to one
         literal_candidate_scores = normalize(literal_candidate_scores)
-        scores = np.array(list(literal_candidate_scores.values()))
-        logging.debug("Score distribution: %s", scores)
-        max_score = scores.max(initial=0)
+        # scores = np.array(list(literal_candidate_scores.values()))
+        # scores = sorted(list(literal_candidate_scores.values()))
+        sorted_candidates_scores = dict(sorted(literal_candidate_scores.items(), key=lambda item: item[1], reverse=True))
+        sorted_candidates = list(sorted_candidates_scores.keys())
+        sorted_scores = list(sorted_candidates_scores.values())
+        logging.debug("Score distribution: %s", sorted_scores)
+        # max_score = scores.max(initial=0)
+        max_score = list(sorted_scores)[0]
         selected = '0'
 
         # In case no match was found
@@ -257,19 +266,23 @@ class Disambiguator:
             return selected, 1.0, None, None
 
         # find top candidate and compute certainty
-        # uniform = uniform = np.random.uniform(size=len(scores))
-        uniform = [1/len(scores)]*len(scores)
+        uniform = [1/len(sorted_scores)]*len(sorted_scores)
         logging.debug("Uniform distribution: %s", uniform)
-        certainty = sum(rel_entr(scores, uniform))/math.log(len(scores))
+        certainty = sum(rel_entr(sorted_scores, uniform))/math.log(len(sorted_scores))
         logging.debug("Certainty according to KL: %s", certainty)
-        # score_entropy = entropy(scores, base=2)
-        # logging.debug("Score entropy: %s", score_entropy)
-        # TODO check certainty/entropy: try KL divergence?
-        # certainty = 1-(score_entropy/math.log(5, 2))
         top_candidates = []
-        for candidate, score in literal_candidate_scores.items():
-            if score == max_score:
+        # for candidate, score in literal_candidate_scores.items():
+        #     if score == max_score:
+        #         top_candidates.append(candidate)
+        for i, candidate in enumerate(sorted_candidates):
+            if i == 0:
                 top_candidates.append(candidate)
+            else:
+                if sorted_candidates_scores[sorted_candidates[i-1]] - sorted_candidates_scores[candidate] > \
+                        (sorted_candidates_scores[candidate] - sorted_candidates_scores[sorted_candidates[i+1]])/2:
+                    break
+                else:
+                    top_candidates.append(candidate)
 
         # case: one top candidate
         if len(top_candidates) == 1:
@@ -284,9 +297,9 @@ class Disambiguator:
                 if certainty > certainty_threshold:
                     self._status = DisambiguatorStatus.SUCCESS_HIGH
                     position = self.scenes[str(self.current_round)][selected]
-                    # TODO change response from history!!
-                    if selected in self.common_ground.history.keys():
-                        response = random.choice(self.common_ground.history[selected]['human'])
+
+                    if selected in self.common_ground.preferred_convention:
+                        response = self.common_ground.preferred_convention[selected]
                     else:
                         response = self.format_response_phrase(self.world[selected]['gender'],
                                                                random.choice(list(literal_candidate_attributes[selected])))
@@ -294,8 +307,11 @@ class Disambiguator:
                     return selected, certainty, int(position), response
                 else:
                     self._status = DisambiguatorStatus.SUCCESS_LOW
-                    response, selected = self.find_and_select_differences(self.scene_characters,
-                                                                          single_candidate=selected)
+                    if selected in self.common_ground.preferred_convention:
+                        response = self.common_ground.preferred_convention[selected]
+                    else:
+                        response, selected = self.find_and_select_differences(self.scene_characters,
+                                                                              single_candidate=selected)
                     position = self.scenes[str(self.current_round)][selected]
                     self.common_ground.add_under_discussion(mention, selected, position, response)
                     return selected, certainty, int(position), response
@@ -307,6 +323,7 @@ class Disambiguator:
                 top_candidate_attributes = {candidate: attributes for candidate, attributes
                                             in literal_candidate_attributes.items() if candidate in top_candidates}
                 pragmatic_match = self.contextual_pragmatic_match(top_candidate_attributes)
+                pragmatic_match = normalize(pragmatic_match)
                 ordered = dict(sorted(pragmatic_match.items(), key=lambda item: item[1], reverse=True))
                 logging.debug("Ordered dict: %s", ordered)
                 selected = next(iter(ordered))
@@ -476,9 +493,44 @@ class Disambiguator:
 
         return previous_mention_score
 
-    def find_preferred_convention(self, character):
-        for character, history in self.common_ground.history:
-            pass
+    def find_preferred_conventions(self, threshold=0.4):
+        mention_corpus = []
+        mention_characters = []
+        for character, history in self.common_ground.history.items():
+            if character in ['1', '2', '3']:
+                mention_corpus.append(' .'.join(history['human']))
+                mention_characters.append(character)
+
+        convention_words = {character: [] for character in mention_characters}
+        tfidfvectors = self.vectorizer.fit_transform(mention_corpus)
+        words = self.vectorizer.get_feature_names_out()
+        for i, character in enumerate(mention_characters):
+            for j, tfidfscore in enumerate(tfidfvectors[i].toarray()[0]):
+                if tfidfscore > threshold:
+                    convention_words[character].append(words[j])
+
+        for character in tqdm(mention_characters):
+            if convention_words[character]:
+                recent_utterance = self.common_ground.history[character]['human'][-1]
+                doc = self.nlp(recent_utterance)
+                relative_head = {'relative_head': None}
+                structure = {'amod': '', 'head': '', 'nmod': ''}
+                for token in doc:
+                    if token.text in convention_words[character]:
+                        head = token.head.text
+                        if token.head.text not in convention_words[character]:
+                            relative_head['relative_head'] = token
+                if relative_head['relative_head']:
+                    structure['head'] = relative_head['relative_head'].text
+                    for child in relative_head['relative_head'].children:
+                        if child.dep_ in ['amod', 'nmod']:
+                            subtree_span = doc[child.left_edge.i: child.right_edge.i+1]
+                            structure[child.dep_] = subtree_span.text
+                    self.common_ground.preferred_convention[character] = 'die ' + ' '.join(list(structure.values()))
+
+
+
+
 
 
     def format_response_phrase(self, sex, difference):
@@ -498,12 +550,12 @@ class Disambiguator:
         return phrase
 
     def save_interaction(self, participant, interaction):
-        path = '/Users/jaapkruijt/Documents/GitHub/spot-woz-parent/spot-woz/py-app/storage/conventions'
+        path = f'{os.getcwd()}/storage/conventions'
         with open(os.path.join(path, f'pp_{participant}_int{interaction}_history.json')) as fname:
             json.dump(self.common_ground.history, fname)
 
     def load_interaction(self, participant, interaction):
-        path = '/Users/jaapkruijt/Documents/GitHub/spot-woz-parent/spot-woz/py-app/storage/conventions'
+        path = f'{os.getcwd()}/storage/conventions'
         with open(os.path.join(path, f'pp_{participant}_int{interaction}_history.json')) as filename:
             self.common_ground.history = json.load(filename)
 
@@ -511,7 +563,7 @@ class Disambiguator:
 
 class CommonGround:
     def __init__(self):
-        # TODO store history as json at end of each round/end of interaction
+        # TODO store history and preferred convention as json at end of each round/end of interaction
         # TODO and load information at start of subsequent interaction
         self.history = {}
         self.positions_discussed = {}
@@ -680,38 +732,20 @@ def rank_by_recency(entity_recencies, characters):
 
 
 if __name__ == "__main__":
-    ment = 'een oudere dame met een bril op.'
-    ment2 = 'Even denken, nummer 3 was een kale meneer.'
-    ment3 = 'Op nummer 5 is dan die bril met wat langer haar.'
-    ment4 = "Oké, die eerste is de man met de bril."
-    disambiguator = Disambiguator(ak_characters, ak_robot_scene)
-    disambiguator.advance_round(start=True)
-    # rational = disambiguator.advance_round('3')
-    # print(rational)
-    disambiguator.advance_round(round_number=6)
-    cand, cert, aux = disambiguator.disambiguate(ment2)
-    print(cand, cert, aux)
-    print(disambiguator.status())
-    print(f'O ja, die staat bij mij op plek {aux}')
-    disambiguator.advance_round(round_number=3)
-    result = disambiguator.disambiguate(ment2)
-    print(result)
-    # lex = compute_base_lexicon(ak_characters)
-    # # chars = ['1', '2', '3', '13', '11']
-    # # literal_listener = literal_listener(lex, chars)
-    # # speaker = pragmatic_speaker(literal_listener, chars)
-    # # pragmatic_listener = pragmatic_listener(speaker, chars)
-    # # print(pragmatic_listener)
-    # candidate_list = literal_match(ment, lex)
-    # print(candidate_list)
-    # simscorer = SimilarityScorer()
-    # item1 = 'deze man heeft een baard'
-    # item = 'deze man heeft geen baard'
-    # doc1 = nlp(item1)
-    # doc2 = nlp(item)
-    # sim = doc1.similarity(doc2)
-    # print(sim)
-    # print(simscorer.calculate_sentence_simscores([item1], [item]))
+    corpus = ['Dat is een man met een baard', 'Dit is de vrouw met de oorbellen', 'Dat is een kale man',
+              'Dat is brilmans']
+    tfidf = TfidfVectorizer()
+    vectors = tfidf.fit_transform(corpus)
+    names = tfidf.get_feature_names_out()
+    print(names)
+    print(vectors.shape)
+    print(vectors)
+    print(tfidf.get_params())
+    first = vectors[0]
+    df = pd.DataFrame(first.T.todense(), index=tfidf.get_feature_names_out(),
+                      columns=["tfidf"])
+    df.sort_values(by=["tfidf"], ascending=False)
+    print(df)
 
 
 

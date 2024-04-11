@@ -26,3 +26,21 @@ test_phrases = [
 correct = [10, 3, 2, 1, 1, 9, 2, 3, 2, 4, 1, 3, 1, 3, 13, 2]
 
 introductions = ["daar staat", "dat is", "ik heb", "ik heb daar", "daar heb ik", "op die plek staat"]
+
+test_phrases_5 = [
+    "een vrouw met lang haar",
+    "een kale man",
+    "een jongen met een bril",
+    "een vrouw met oorbellen",
+    "een man met een kuif"
+    "de vrouw met oorbellen",
+    "een man met een bril en bruin haar",
+    "de jongen met de bril",
+    "de kale man",
+    "een vrouw met kort bruin haar",
+    "de jongen met de bril",
+    "een oude vrouw met een bril",
+    "de vrouw met de oorbellen",
+    "de kale man",
+    "een klein kind",
+]
