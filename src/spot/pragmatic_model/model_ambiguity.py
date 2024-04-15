@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import math
 from enum import Enum
 import logging
@@ -16,7 +18,7 @@ import numpy as np
 import json
 import os
 from difflib import SequenceMatcher
-import pandas as pd
+
 from tqdm import tqdm
 from spot.pragmatic_model.detect_mentions import subtree_right_approach
 from collections import Counter
@@ -549,14 +551,16 @@ class Disambiguator:
 
         return phrase
 
-    def save_interaction(self, participant, interaction):
-        path = f'{os.getcwd()}/storage/conventions'
-        with open(os.path.join(path, f'pp_{participant}_int{interaction}_history.json')) as fname:
+    def save_interaction(self, storage_dir, participant, interaction):
+        path = f'{storage_dir}/conventions'
+        Path(path).mkdir(parents=True, exist_ok=True)
+
+        with open(os.path.join(path, f'pp_{participant}_int{interaction}_history.json'), 'w') as fname:
             json.dump(self.common_ground.history, fname)
 
-    def load_interaction(self, participant, interaction):
-        path = f'{os.getcwd()}/storage/conventions'
-        with open(os.path.join(path, f'pp_{participant}_int{interaction}_history.json')) as filename:
+    def load_interaction(self, storage_dir, participant, interaction):
+        path = f'{storage_dir}/conventions'
+        with open(os.path.join(path, f'pp_{participant}_int{interaction}_history.json'), 'w') as filename:
             self.common_ground.history = json.load(filename)
 
 
@@ -732,6 +736,8 @@ def rank_by_recency(entity_recencies, characters):
 
 
 if __name__ == "__main__":
+    import pandas as pd
+
     corpus = ['Dat is een man met een baard', 'Dit is de vrouw met de oorbellen', 'Dat is een kale man',
               'Dat is brilmans']
     tfidf = TfidfVectorizer()
