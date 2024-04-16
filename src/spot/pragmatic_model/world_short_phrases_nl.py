@@ -1,8 +1,8 @@
 ak1 = {'gender': 'vrouw', 'age': 'jong', 'hair_style': 'bob', 'hair_color': 'blond haar', 'hair_type': 'stijl',
        'accessory': 'oorbellen'}
-ak2 = {'gender': 'man', 'age': 'jong', 'hair_style': 'kort haar', 'hair_color': 'blond haar', 'hair_type': 'krullen',
+ak2 = {'gender': 'man', 'age': 'oud', 'hair_style': 'kort haar', 'hair_color': 'grijs haar', 'hair_type': 'stijl',
        'accessory': 'bril'}
-ak3 = {'gender': 'man', 'hair_style': 'kaal', 'hair_color': 'grijs haar',
+ak3 = {'gender': 'man', 'hair_style': 'kaal',
        'facial_hair': 'baard'}
 ak4 = {'gender': 'man', 'hair_style': 'kort haar', 'hair_color': 'bruin haar',
        'hair_type': 'krullen', 'accessory': 'bril'}
