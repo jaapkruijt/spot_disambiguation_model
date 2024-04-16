@@ -20,6 +20,7 @@ import os
 from difflib import SequenceMatcher
 
 from tqdm import tqdm
+from string import punctuation
 from spot.pragmatic_model.detect_mentions import subtree_right_approach
 from collections import Counter
 
@@ -200,8 +201,7 @@ class Disambiguator:
         """
         # Strip the mention of any leading or trailing spaces and punctuation
         mention.strip()
-        # TODO regex to strip all punctuation
-        mention.strip('.')
+        mention.strip(punctuation)
         logging.debug("Mention: %s", mention)
         logging.debug("Status: %s", self.status())
 
@@ -529,11 +529,6 @@ class Disambiguator:
                             subtree_span = doc[child.left_edge.i: child.right_edge.i+1]
                             structure[child.dep_] = subtree_span.text
                     self.common_ground.preferred_convention[character] = 'die ' + ' '.join(list(structure.values()))
-
-
-
-
-
 
     def format_response_phrase(self, sex, difference):
         if difference in ['jong', 'oud']:

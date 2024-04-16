@@ -53,7 +53,7 @@ def nsubj_approach(utterance):
 
 
 if __name__ == "__main__":
-    mention = 'dat is een kale man met een baard'
+    mention = 'ik heb een vrouw met oorbellen'
     result = subtree_right_approach(mention)
     result2 = nsubj_approach(mention)
     print(result)
