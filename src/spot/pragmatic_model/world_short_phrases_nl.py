@@ -17,11 +17,11 @@ ak8 = {'gender': 'jongen', 'age': 'kind', 'hair_style': 'kort haar',
 ak9 = {'gender': 'vrouw', 'age': 'oud', 'hair_style': 'kort haar',
         'hair_color': 'blond haar', 'hair_type': 'stijl', 'accessory': 'bril'}
 ak10 = {'gender': 'vrouw', 'age': 'jong', 'hair_style': 'lang haar',
-        'hair_color': 'bruin haar', 'hair_type': 'krullen'}
+        'hair_color': 'bruin haar', 'hair_type': 'golvend haar'}
 ak11 = {'gender': 'vrouw', 'age': 'jong', 'hair_style': 'lang haar',
         'hair_color': 'bruin haar', 'hair_type': 'stijl', 'accessory': 'bril'}
 ak12 = {'gender': 'vrouw', 'hair_style': 'bob',
-        'hair_color': 'bruin haar', 'hair_type': 'krullen'}
+        'hair_color': 'bruin haar', 'hair_type': 'golvend haar'}
 ak13 = {'gender': 'man', 'age': 'oud', 'hair_style': 'kaal'}
 ak14 = {'gender': 'man', 'age': 'jong', 'hair_style': 'kuif',
         'hair_color': 'bruin haar', 'hair_type': 'stijl', 'facial_hair': 'baard'}
@@ -32,12 +32,12 @@ ak_characters = {'1': ak1, '2': ak2, '3': ak3, '4': ak4, '5': ak5, '6': ak6, '7'
                  '8': ak8, '9': ak9, '10': ak10, '11': ak11, '12': ak12, '13': ak13, '14': ak14, '15': ak15}
 # ak_characters_rounds = {'1': [ak1, ak2, ak3, ak10, ak14], '2': [ak1, ak2, ak3, ak12, ak4], '3': [ak1, ak2, ak3, ak8, ak9],
 #                  '4': [ak1, ak2, ak3, ak6, ak15], '5': [ak1, ak2, ak3, ak13, ak11], '6': [ak1, ak2, ak3, ak7, ak5]}
-ak_robot_scene = {'1': {'1': '2', '2': '1', '3': '3', '10': '5', '14': '4'},
-                  '2': {'1': '4', '2': '2', '3': '1', '12': '5', '4': '4'},
-                  '3': {'1': '3', '2': '2', '3': '4', '8': '1', '9': '5'},
-                  '4': {'1': '2', '2': '1', '3': '5', '6': '3', '15': '4'},
-                  '5': {'1': '2', '2': '4', '3': '3', '13': '5', '11': '1'},
-                  '6': {'1': '1', '2': '3', '3': '4', '7': '2', '5': '5'}}
+ak_robot_scene = {'1': {'1': '1', '2': '3', '3': '2', '10': '5', '14': '4'},
+                  '2': {'1': '3', '2': '2', '3': '1', '12': '4', '4': '5'},
+                  '3': {'1': '5', '2': '2', '3': '4', '8': '3', '9': '1'},
+                  '4': {'1': '3', '2': '2', '3': '1', '6': '5', '15': '4'},
+                  '5': {'1': '5', '2': '2', '3': '4', '13': '1', '11': '3'},
+                  '6': {'1': '1', '2': '3', '3': '2', '7': '4', '5': '4'}}
 
 en1 = {'gender': 'man', 'hair_style': 'lang haar',
        'hair_color': 'bruin haar', 'hair_type': 'stijl', 'facial_hair': 'baard'}
