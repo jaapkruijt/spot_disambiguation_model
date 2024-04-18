@@ -303,8 +303,11 @@ class Disambiguator:
                     if selected in self.common_ground.preferred_convention:
                         response = self.common_ground.preferred_convention[selected]
                     else:
-                        response = self.format_response_phrase(self.world[selected]['gender'],
+                        try:
+                            response = self.format_response_phrase(self.world[selected]['gender'],
                                                                random.choice(list(literal_candidate_attributes[selected])))
+                        except IndexError:
+                            response = 'die'
                     self.common_ground.add_under_discussion(mention, selected, position, response)
                     return selected, certainty, int(position), response
                 else:
