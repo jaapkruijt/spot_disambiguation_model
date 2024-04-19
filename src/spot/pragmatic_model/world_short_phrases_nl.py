@@ -1,4 +1,4 @@
-ak1 = {'gender': 'vrouw', 'age': 'jong', 'hair_style': 'bob', 'hair_color': 'blond haar', 'hair_type': 'stijl',
+ak1 = {'gender': 'vrouw', 'age': 'jong', 'hair_style': ['bob', 'kort haar'], 'hair_color': 'blond haar', 'hair_type': 'stijl',
        'accessory': 'oorbellen'}
 ak2 = {'gender': 'man', 'age': 'oud', 'hair_style': 'kort haar', 'hair_color': 'grijs haar', 'hair_type': 'stijl',
        'accessory': 'bril'}
@@ -26,7 +26,7 @@ ak13 = {'gender': 'man', 'age': 'oud', 'hair_style': 'kaal'}
 ak14 = {'gender': 'man', 'age': 'jong', 'hair_style': 'kuif',
         'hair_color': 'bruin haar', 'hair_type': 'stijl', 'facial_hair': 'baard'}
 ak15 = {'gender': 'man', 'hair_style': 'kort haar',
-        'hair_color': 'zwart haar', 'hair_type': 'stekels'}
+        'hair_color': ['zwart haar', 'bruin haar'], 'hair_type': 'stekels'}
 
 ak_characters = {'1': ak1, '2': ak2, '3': ak3, '4': ak4, '5': ak5, '6': ak6, '7': ak7,
                  '8': ak8, '9': ak9, '10': ak10, '11': ak11, '12': ak12, '13': ak13, '14': ak14, '15': ak15}

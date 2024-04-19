@@ -615,7 +615,11 @@ class Lexicon:
 
         for character in characters:
             for attribute in character.values():
-                attributes[attribute] = {}
+                if type(attribute) is list:
+                    for attr in attribute:
+                        attributes[attr] = {}
+                else:
+                    attributes[attribute] = {}
 
         return attributes
 
