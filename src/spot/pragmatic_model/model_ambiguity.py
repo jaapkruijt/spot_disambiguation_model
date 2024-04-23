@@ -18,6 +18,7 @@ import numpy as np
 import json
 import os
 from difflib import SequenceMatcher
+import re
 
 from tqdm import tqdm
 from string import punctuation
@@ -207,13 +208,16 @@ class Disambiguator:
 
         # check if coming from repair, positive response or new input
         if self.status() == 'MATCH_MULTIPLE':
-            if 'ja' in mention.lower():
+            if re.search(r"\bja\b", mention.lower()):
                 self._status = DisambiguatorStatus.SUCCESS_HIGH
                 selected = self.common_ground.under_discussion['guess'][-1]
                 position = self.common_ground.under_discussion['position'][-1]
                 response = self.common_ground.under_discussion['response'][-1]
 
                 return selected, 1.0, int(position), response
+            elif re.search(r"\bnee\b", mention.lower()):
+                self._status = DisambiguatorStatus.NEG_RESPONSE
+                return '0', 1.0, None, None
 
         # compute similarity scores with history
         history_score = self.mention_history_scoring(mention, history_threshold)
@@ -239,7 +243,7 @@ class Disambiguator:
         logging.debug("Scores after prior: %s", literal_candidate_scores)
 
         # lower probability for original guess in case of negative feedback
-        if self.status() in ['MATCH_PREVIOUS', 'MATCH_PREVIOUS', 'SUCCESS_LOW']:
+        if self.status() in ['MATCH_PREVIOUS', 'MATCH_MULTIPLE', 'SUCCESS_LOW']:
             # TODO check if too thorough
             for previous_guess in self.common_ground.under_discussion['guess']:
                 literal_candidate_scores[previous_guess] -= 0.1
@@ -260,9 +264,9 @@ class Disambiguator:
 
         # In case no match was found
         if max_score == 0.0:
-            if 'nee ' in mention.lower():
+            if re.search(r"\bnee\b", mention.lower()):
                 self._status = DisambiguatorStatus.NEG_RESPONSE
-                return selected, 1.0, None, None
+                return '0', 1.0, None, None
             self._status = DisambiguatorStatus.NO_MATCH
             self.common_ground.add_under_discussion(mention)
             return selected, 1.0, None, None
@@ -409,30 +413,59 @@ class Disambiguator:
         matches = []
         for section in scoring:
             matches.append(list(zip(section, list(self.lexicon.base_lexicon().keys()))))
-        mention_text = {}
+        # mention_text = {}
         for i, match in enumerate(matches):
+            losing_lengths = self.find_losing_hair_lengths(match)
+            losing_colours = self.find_losing_hair_colours(match)
             for score, attribute in match:
-                if score >= threshold:
-                    # logging.debug("Match for mention part %s with %s, score: %s", mention_parts[i], attribute, score)
-                    mention_text[mention_parts[i]] = None
-                    for character, value in self.lexicon.base_lexicon()[attribute].items():
-                        if value == 1 and character in self.scene_characters:
-                            # avoid multiple mentions
-                            if attribute not in candidate_attributes[character]:
-                                logging.debug("Found match for attribute %s for character %s", attribute, character)
-                                candidate_attributes[character].add(attribute)
-                                candidate_scores[character] += score
+                if attribute not in losing_lengths and attribute not in losing_colours:
+                    if score >= threshold:
+                        # logging.debug("Match for mention part %s with %s, score: %s", mention_parts[i], attribute, score)
+                        # mention_text[mention_parts[i]] = None
+                        for character, value in self.lexicon.base_lexicon()[attribute].items():
+                            if value == 1 and character in self.scene_characters:
+                                # avoid multiple mentions
+                                if attribute not in candidate_attributes[character]:
+                                    logging.debug("Found match for attribute %s for character %s", attribute, character)
+                                    candidate_attributes[character].add(attribute)
+                                    candidate_scores[character] += score
 
         candidate_scores = normalize(candidate_scores)
 
-        mention_string = ''
-        for i, part in enumerate(mention_text):
-            if i == 0:
-                mention_string += part
-            else:
-                mention_string += ' ' + part.split()[-1]
+        # mention_string = ''
+        # for i, part in enumerate(mention_text):
+        #     if i == 0:
+        #         mention_string += part
+        #     else:
+        #         mention_string += ' ' + part.split()[-1]
 
         return candidate_attributes, candidate_scores
+
+    def find_losing_hair_colours(self, match):
+        colours = {}
+        hair_colours = ['bruin haar', 'grijs haar', 'zwart haar', 'blond haar']
+        for score, attribute in match:
+            if attribute in hair_colours:
+                colours[attribute] = score
+        sorted_colours = dict(sorted(colours.items(), key=lambda item: item[1], reverse=True))
+        winner = next(iter(sorted_colours))
+        losers = list(colours.keys())
+        losers.remove(winner)
+
+        return losers
+
+    def find_losing_hair_lengths(self, match):
+        lengths = {}
+        hair_lengths = ['kort haar', 'lang haar']
+        for score, attribute in match:
+            if attribute in hair_lengths:
+                lengths[attribute] = score
+        sorted_lengths = dict(sorted(lengths.items(), key=lambda item: item[1], reverse=True))
+        winner = next(iter(sorted_lengths))
+        losers = list(lengths.keys())
+        losers.remove(winner)
+
+        return losers
 
     def contextual_pragmatic_match(self, candidates):
         total = {candidate: 0 for candidate in candidates.keys()}
@@ -553,14 +586,17 @@ class Disambiguator:
         path = f'{storage_dir}/conventions'
         Path(path).mkdir(parents=True, exist_ok=True)
 
+        common_ground = {'history': self.common_ground.history, 'conventions': self.common_ground.preferred_convention}
+
         with open(os.path.join(path, f'pp_{participant}_int{interaction}_history.json'), 'w') as fname:
             json.dump(self.common_ground.history, fname)
 
     def load_interaction(self, storage_dir, participant, interaction):
         path = f'{storage_dir}/conventions'
         with open(os.path.join(path, f'pp_{participant}_int{interaction}_history.json'), 'w') as filename:
-            self.common_ground.history = json.load(filename)
-
+            common_ground = json.load(filename)
+            self.common_ground.history = common_ground['history']
+            self.common_ground.preferred_convention = common_ground['conventions']
 
 
 class CommonGround:
@@ -631,8 +667,12 @@ class Lexicon:
         lexicon = self.get_attributes(characters)
 
         for i, character in enumerate(characters):
+            sub_values = [sub_value for value in character.values() for sub_value in value if
+                          isinstance(value, list)]
+            character_attributes = [value for value in character.values() if not isinstance(value, list)]
+            character_attributes.extend(sub_values)
             for attribute in lexicon:
-                if attribute in character.values():
+                if attribute in character_attributes:
                     lexicon[attribute][str(i + 1)] = 1
                 else:
                     lexicon[attribute][str(i + 1)] = 0

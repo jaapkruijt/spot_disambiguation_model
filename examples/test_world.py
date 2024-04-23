@@ -7,11 +7,11 @@ test_scene = {'1': {'1': '2', '2': '1', '3': '4', '10': '3'},
 test_phrases = [
     "een vrouw met lang haar",
     "een kale man",
-    "een jongen met een bril",
+    "een man met een bril",
     "een vrouw met oorbellen",
     "de vrouw met oorbellen",
     "een vrouw met een bril",
-    "de jongen met de bril",
+    "de man met de bril",
     "de kale man",
     "de jongen met de bril",
     "een man met bruin haar en een bril",
@@ -20,7 +20,7 @@ test_phrases = [
     "de vrouw met de oorbellen",
     "de kale man",
     "een oude kale man",
-    "de jongen met de bril"
+    "de man met de bril"
 ]
 
 correct = [10, 3, 2, 1, 1, 9, 2, 3, 2, 4, 1, 3, 1, 3, 13, 2]

@@ -1,29 +1,29 @@
-ak1 = {'gender': 'vrouw', 'age': 'jong', 'hair_style': ['bob', 'kort haar'], 'hair_color': 'blond haar', 'hair_type': 'stijl',
+ak1 = {'gender': 'vrouw', 'hair_style': ['bob', 'kort haar'], 'hair_color': 'blond haar', 'hair_type': 'stijl',
        'accessory': 'oorbellen'}
-ak2 = {'gender': 'man', 'age': 'oud', 'hair_style': 'kort haar', 'hair_color': 'grijs haar', 'hair_type': 'stijl',
+ak2 = {'gender': 'man', 'age': 'oud', 'hair_style': 'kort haar', 'hair_color': 'grijs haar',
        'accessory': 'bril'}
 ak3 = {'gender': 'man', 'hair_style': 'kaal',
        'facial_hair': 'baard'}
 ak4 = {'gender': 'man', 'hair_style': 'kort haar', 'hair_color': 'bruin haar',
-       'hair_type': 'krullen', 'accessory': 'bril'}
+       'hair_type': 'krulhaar', 'accessory': 'bril'}
 ak5 = {'gender': 'man', 'hair_style': 'kaal', 'hair_color': 'bruin haar',
         'facial_hair': 'baard'}
-ak6 = {'gender': 'vrouw', 'age': 'jong', 'hair_style': 'bob', 'hair_color': 'zwart haar',
+ak6 = {'gender': 'vrouw', 'hair_style': 'bob', 'hair_color': ['zwart haar', 'bruin haar'],
        'hair_type': 'stijl'}
 ak7 = {'gender': 'vrouw', 'hair_style': 'lang haar',
         'hair_color': 'blond haar', 'hair_type': 'stijl'}
-ak8 = {'gender': 'jongen', 'age': 'kind', 'hair_style': 'kort haar',
+ak8 = {'gender': ['jongen', 'jongetje'], 'age': ['jong', 'kind'], 'hair_style': 'kort haar',
         'hair_color': 'blond haar', 'hair_type': 'stijl'}
 ak9 = {'gender': 'vrouw', 'age': 'oud', 'hair_style': 'kort haar',
         'hair_color': 'blond haar', 'hair_type': 'stijl', 'accessory': 'bril'}
-ak10 = {'gender': 'vrouw', 'age': 'jong', 'hair_style': 'lang haar',
+ak10 = {'gender': 'vrouw', 'hair_style': 'lang haar',
         'hair_color': 'bruin haar', 'hair_type': 'golvend haar'}
-ak11 = {'gender': 'vrouw', 'age': 'jong', 'hair_style': 'lang haar',
+ak11 = {'gender': 'vrouw', 'hair_style': 'lang haar',
         'hair_color': 'bruin haar', 'hair_type': 'stijl', 'accessory': 'bril'}
 ak12 = {'gender': 'vrouw', 'hair_style': 'bob',
         'hair_color': 'bruin haar', 'hair_type': 'golvend haar'}
 ak13 = {'gender': 'man', 'age': 'oud', 'hair_style': 'kaal'}
-ak14 = {'gender': 'man', 'age': 'jong', 'hair_style': 'kuif',
+ak14 = {'gender': 'man', 'hair_style': 'kuif',
         'hair_color': 'bruin haar', 'hair_type': 'stijl', 'facial_hair': 'baard'}
 ak15 = {'gender': 'man', 'hair_style': 'kort haar',
         'hair_color': ['zwart haar', 'bruin haar'], 'hair_type': 'stekels'}
