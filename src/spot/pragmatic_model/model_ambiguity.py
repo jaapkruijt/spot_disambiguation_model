@@ -172,7 +172,6 @@ class Disambiguator:
             self.common_ground.history[selection]['human'].append(mention)
         else:
             self.common_ground.history[selection] = {'human': [mention]}
-        # TODO do we want to add the robot response to mention history?
         if self.high_engagement:
             response = self.common_ground.under_discussion['response'][-1]
             if response:
@@ -184,7 +183,7 @@ class Disambiguator:
         self.common_ground.update_priors(self.scene_characters, character_mentioned=selection)
 
     def disambiguate(self, mention, approach='full', history_factor=1.0, test=False, literal_threshold=0.7,
-                     history_threshold=0.60, split_size=2, certainty_threshold=0.60):
+                     history_threshold=0.4, split_size=2, certainty_threshold=0.60):
         """
         Main function of the disambiguator used to identify a character based on a description. First checks its status
         to determine whether repair is necessary. Combines a literal cosine-similarity-based score with a score based on
@@ -215,6 +214,7 @@ class Disambiguator:
                 response = self.common_ground.under_discussion['response'][-1]
 
                 return selected, 1.0, int(position), response
+            # TODO duplicate code, see line 268
             elif re.search(r"\bnee\b", mention.lower()):
                 self._status = DisambiguatorStatus.NEG_RESPONSE
                 return '0', 1.0, None, None
@@ -264,6 +264,7 @@ class Disambiguator:
 
         # In case no match was found
         if max_score == 0.0:
+            # TODO duplicate code, see line 218
             if re.search(r"\bnee\b", mention.lower()):
                 self._status = DisambiguatorStatus.NEG_RESPONSE
                 return '0', 1.0, None, None
@@ -477,7 +478,7 @@ class Disambiguator:
         return total
 
 
-    def mention_history_scoring(self, mention, history_threshold=0.8):
+    def mention_history_scoring(self, mention, history_threshold=0.4):
         # TODO internal convention strength: number of rounds + internal sim score
         # TODO rate internal strength of convention against match with current mention
         mention_embedding = self.scorer.model.encode([mention], convert_to_tensor=True)
@@ -526,7 +527,8 @@ class Disambiguator:
                     # history_scores = torch.nn.functional.normalize(history_scores, dim=0)
                     history_scores = history_scores.tolist()
                     history_score = sum(history_scores)
-                    previous_mention_score[character] = (history_score, strength_avg)
+                    if history_score > history_threshold:
+                        previous_mention_score[character] = (history_score, strength_avg)
                     logging.debug("Avg history score for character %s: %s", character, previous_mention_score)
 
         return previous_mention_score
@@ -535,7 +537,7 @@ class Disambiguator:
         mention_corpus = []
         mention_characters = []
         for character, history in self.common_ground.history.items():
-            if character in ['1', '2', '3']:
+            if len(history['human']) >= 3:
                 mention_corpus.append(' .'.join(history['human']))
                 mention_characters.append(character)
 
@@ -555,7 +557,6 @@ class Disambiguator:
                 structure = {'amod': '', 'head': '', 'nmod': ''}
                 for token in doc:
                     if token.text in convention_words[character]:
-                        head = token.head.text
                         if token.head.text not in convention_words[character]:
                             relative_head['relative_head'] = token
                 if relative_head['relative_head']:
