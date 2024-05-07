@@ -226,13 +226,13 @@ class Disambiguator:
         literal_candidate_attributes, literal_candidate_scores = self.literal_match(mention, threshold=literal_threshold, split_size=split_size)
         for character, attributes in literal_candidate_attributes.items():
             logging.debug("Attributes for character %s: %s", character, attributes)
-        logging.debug("Scores before history: %s", literal_candidate_scores)
+        # logging.debug("Scores before history: %s", literal_candidate_scores)
 
         # combine literal score and history score through weighted averaging
         for character, (score, weight) in history_score.items():
             literal_candidate_scores[character] = np.average(np.array([literal_candidate_scores[character], score]),
                                                              weights=np.array([1.0, weight*history_factor]))
-        logging.debug("Scores after history scoring: %s", literal_candidate_scores)
+        # logging.debug("Scores after history scoring: %s", literal_candidate_scores)
 
         # update the prior probability for each character
         for character, score in literal_candidate_scores.items():
@@ -240,7 +240,7 @@ class Disambiguator:
         # TODO can we do it with lists/arrays like below?
         # literal_scores = [literal_candidate_scores[character]*self.common_ground.priors[character]
         #                   for character in literal_candidate_scores.keys()]
-        logging.debug("Scores after prior: %s", literal_candidate_scores)
+        # logging.debug("Scores after prior: %s", literal_candidate_scores)
 
         # lower probability for original guess in case of negative feedback
         if self.status() in ['MATCH_PREVIOUS', 'MATCH_MULTIPLE', 'SUCCESS_LOW']:
@@ -274,7 +274,7 @@ class Disambiguator:
 
         # find top candidate and compute certainty
         uniform = [1/len(sorted_scores)]*len(sorted_scores)
-        logging.debug("Uniform distribution: %s", uniform)
+        # logging.debug("Uniform distribution: %s", uniform)
         certainty = sum(rel_entr(sorted_scores, uniform))/math.log(len(sorted_scores))
         logging.debug("Certainty according to KL: %s", certainty)
         top_candidates = []
@@ -335,13 +335,13 @@ class Disambiguator:
                 pragmatic_match = self.contextual_pragmatic_match(top_candidate_attributes)
                 pragmatic_match = normalize(pragmatic_match)
                 ordered = dict(sorted(pragmatic_match.items(), key=lambda item: item[1], reverse=True))
-                logging.debug("Ordered dict: %s", ordered)
+                # logging.debug("Ordered dict: %s", ordered)
                 selected = next(iter(ordered))
-                logging.debug('Selected character: %s', selected)
+                # logging.debug('Selected character: %s', selected)
                 response, selected = self.find_and_select_differences(top_candidates, single_candidate=selected)
                 scores = np.array(list(ordered.values()))
                 uniform = [1/len(scores)]*len(scores)
-                logging.debug("Uniform distribution: %s", uniform)
+                # logging.debug("Uniform distribution: %s", uniform)
                 certainty = sum(rel_entr(scores, uniform))/math.log(len(scores))
                 # score_entropy = entropy(scores, base=2)
                 # certainty = 1-(score_entropy/math.log(len(ordered), 2))
@@ -406,8 +406,8 @@ class Disambiguator:
         else:
             mention_parts = [mention]
         # log information about mention parts
-        for part in mention_parts:
-            logging.debug("Mention part: %s", part)
+        # for part in mention_parts:
+            # logging.debug("Mention part: %s", part)
         # score mention parts against attributes
         scoring = self.scorer.calculate_sentence_simscores(mention_parts, list(self.lexicon.base_lexicon().keys()))
         scoring = scoring.tolist()
@@ -493,8 +493,8 @@ class Disambiguator:
                         previous_mentions = history['human']
                     # logging information
                     logging.debug("History for character: %s", character)
-                    for previous in previous_mentions:
-                        logging.debug("Previous mention: %s", previous)
+                    # for previous in previous_mentions:
+                        # logging.debug("Previous mention: %s", previous)
                     mention_freq = len(previous_mentions)
                     prev_embeddings = self.scorer.model.encode(previous_mentions, convert_to_tensor=True)
                     strength_scores = util.cos_sim(prev_embeddings, prev_embeddings)
@@ -503,7 +503,7 @@ class Disambiguator:
                     logging.debug("Average history strength: %s", strength_avg)
                     cosine_scores = util.cos_sim(mention_embedding, prev_embeddings)
                     cosine_scores = torch.flatten(cosine_scores)
-                    logging.debug("Flattened cosine scores: %s", cosine_scores)
+                    # logging.debug("Flattened cosine scores: %s", cosine_scores)
                     # cosine_scores = torch.mul(cosine_scores, strength_avg)
                     cosine_scores = cosine_scores.to('cpu')
                     # logging.debug("Cosine scores mutiplied by weight: %s", cosine_scores)
@@ -513,23 +513,23 @@ class Disambiguator:
                     for previous in previous_mentions:
                         seq.set_seq1(previous)
                         match = seq.find_longest_match()
-                        logging.debug("Longest match info for history %s: %s", previous, match)
+                        # logging.debug("Longest match info for history %s: %s", previous, match)
                         match_ratio = seq.ratio()
-                        logging.debug("Match ratio for history %s: %s", previous, match_ratio)
+                        # logging.debug("Match ratio for history %s: %s", previous, match_ratio)
                         seq_matches.append(match_ratio)
                     seq_scores = torch.tensor(seq_matches).to('cpu')
                     history_scores = cosine_scores*seq_scores
-                    logging.debug("Combined score: %s", history_scores)
+                    # logging.debug("Combined score: %s", history_scores)
                     recency_weights = torch.tensor([1/i for i in range(len(history_scores), 0, -1)])
-                    logging.debug("Recency for history: %s", recency_weights)
+                    # logging.debug("Recency for history: %s", recency_weights)
                     history_scores = history_scores*recency_weights
-                    logging.debug("Combined scores weighed by recency: %s", history_scores)
+                    # logging.debug("Combined scores weighed by recency: %s", history_scores)
                     # history_scores = torch.nn.functional.normalize(history_scores, dim=0)
                     history_scores = history_scores.tolist()
                     history_score = sum(history_scores)
                     if history_score > history_threshold:
                         previous_mention_score[character] = (history_score, strength_avg)
-                    logging.debug("Avg history score for character %s: %s", character, previous_mention_score)
+        logging.debug("Avg history score: %s", previous_mention_score)
 
         return previous_mention_score
 
@@ -538,8 +538,17 @@ class Disambiguator:
         mention_characters = []
         for character, history in self.common_ground.history.items():
             if len(history['human']) >= 3:
-                mention_corpus.append(' .'.join(history['human']))
+                mention_corpus.append('. '.join(history['human']))
                 mention_characters.append(character)
+
+        if not mention_corpus:
+            return
+
+        for character, history in self.common_ground.history.items():
+            if character in mention_characters:
+                continue
+            else:
+                mention_corpus.append('. '.join(history['human']))
 
         convention_words = {character: [] for character in mention_characters}
         tfidfvectors = self.vectorizer.fit_transform(mention_corpus)
@@ -550,22 +559,30 @@ class Disambiguator:
                     convention_words[character].append(words[j])
 
         for character in tqdm(mention_characters):
+            logging.debug("Finding preferred convention for character %s", character)
             if convention_words[character]:
+                logging.debug('Salient words: %s', convention_words[character])
                 recent_utterance = self.common_ground.history[character]['human'][-1]
                 doc = self.nlp(recent_utterance)
                 relative_head = {'relative_head': None}
                 structure = {'amod': '', 'head': '', 'nmod': ''}
                 for token in doc:
                     if token.text in convention_words[character]:
-                        if token.head.text not in convention_words[character]:
-                            relative_head['relative_head'] = token
+                        if token.pos_ not in ['DET', 'AUX']:
+                            if token.head.text not in convention_words[character]:
+                                relative_head['relative_head'] = token
                 if relative_head['relative_head']:
                     structure['head'] = relative_head['relative_head'].text
+                    logging.debug("Head of convention: %s", structure['head'])
                     for child in relative_head['relative_head'].children:
                         if child.dep_ in ['amod', 'nmod']:
                             subtree_span = doc[child.left_edge.i: child.right_edge.i+1]
                             structure[child.dep_] = subtree_span.text
-                    self.common_ground.preferred_convention[character] = 'die ' + ' '.join(list(structure.values()))
+                    if not structure['amod'] and not structure['nmod']:
+                        logging.debug("No modifiers found from head")
+                        subtree_span = doc[relative_head['relative_head'].left_edge.i: relative_head['relative_head'].right_edge.i+1]
+                        structure['head'] = subtree_span.text
+                    self.common_ground.preferred_convention[character] = 'die ' + ' '.join([value for value in list(structure.values()) if value])
 
     def format_response_phrase(self, sex, difference):
         if difference in ['jong', 'oud']:
@@ -590,7 +607,7 @@ class Disambiguator:
         common_ground = {'history': self.common_ground.history, 'conventions': self.common_ground.preferred_convention}
 
         with open(os.path.join(path, f'pp_{participant}_int{interaction}_history.json'), 'w') as fname:
-            json.dump(self.common_ground.history, fname)
+            json.dump(common_ground, fname)
 
     def load_interaction(self, storage_dir, participant, interaction):
         path = f'{storage_dir}/conventions'
