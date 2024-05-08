@@ -328,31 +328,53 @@ class Disambiguator:
 
         # case: more than one top candidate
         if len(top_candidates) > 1:
-            self._status = DisambiguatorStatus.MATCH_MULTIPLE
-            if approach == 'full':
-                top_candidate_attributes = {candidate: attributes for candidate, attributes
-                                            in literal_candidate_attributes.items() if candidate in top_candidates}
-                pragmatic_match = self.contextual_pragmatic_match(top_candidate_attributes)
-                pragmatic_match = normalize(pragmatic_match)
-                ordered = dict(sorted(pragmatic_match.items(), key=lambda item: item[1], reverse=True))
-                # logging.debug("Ordered dict: %s", ordered)
-                selected = next(iter(ordered))
-                # logging.debug('Selected character: %s', selected)
-                response, selected = self.find_and_select_differences(top_candidates, single_candidate=selected)
-                scores = np.array(list(ordered.values()))
-                uniform = [1/len(scores)]*len(scores)
-                # logging.debug("Uniform distribution: %s", uniform)
-                certainty = sum(rel_entr(scores, uniform))/math.log(len(scores))
-                # score_entropy = entropy(scores, base=2)
-                # certainty = 1-(score_entropy/math.log(len(ordered), 2))
+            available_candidates = []
+            for candidate in top_candidates:
+                if candidate not in self.common_ground.positions_discussed[str(self.current_round)].values():
+                    available_candidates.append(candidate)
+            if not available_candidates:
+                self._status = DisambiguatorStatus.MATCH_PREVIOUS
+                selected = top_candidates[0]
                 position = self.scenes[str(self.current_round)][selected]
+                self.common_ground.add_under_discussion(mention, selected, position)
+                return selected, certainty, int(position), None
+            elif len(available_candidates) == 1:
+                selected = available_candidates[0]
+                self._status = DisambiguatorStatus.SUCCESS_LOW
+                if selected in self.common_ground.preferred_convention:
+                    response = self.common_ground.preferred_convention[selected]
+                else:
+                    response, selected = self.find_and_select_differences(top_candidates,
+                                                                          single_candidate=selected)
+                position = self.scenes[str(self.current_round)][selected]
+                self.common_ground.add_under_discussion(mention, selected, position, response)
+                return selected, certainty, int(position), response
             else:
-                response, selected = self.find_and_select_differences(top_candidates)
-                position = self.scenes[str(self.current_round)][selected]
+                self._status = DisambiguatorStatus.MATCH_MULTIPLE
+                if approach == 'full':
+                    top_candidate_attributes = {candidate: attributes for candidate, attributes
+                                                in literal_candidate_attributes.items() if candidate in top_candidates}
+                    pragmatic_match = self.contextual_pragmatic_match(top_candidate_attributes)
+                    pragmatic_match = normalize(pragmatic_match)
+                    ordered = dict(sorted(pragmatic_match.items(), key=lambda item: item[1], reverse=True))
+                    # logging.debug("Ordered dict: %s", ordered)
+                    selected = next(iter(ordered))
+                    # logging.debug('Selected character: %s', selected)
+                    response, selected = self.find_and_select_differences(top_candidates, single_candidate=selected)
+                    scores = np.array(list(ordered.values()))
+                    uniform = [1/len(scores)]*len(scores)
+                    # logging.debug("Uniform distribution: %s", uniform)
+                    certainty = sum(rel_entr(scores, uniform))/math.log(len(scores))
+                    # score_entropy = entropy(scores, base=2)
+                    # certainty = 1-(score_entropy/math.log(len(ordered), 2))
+                    position = self.scenes[str(self.current_round)][selected]
+                else:
+                    response, selected = self.find_and_select_differences(top_candidates)
+                    position = self.scenes[str(self.current_round)][selected]
 
-            self.common_ground.add_under_discussion(mention, selected, position, response)
+                self.common_ground.add_under_discussion(mention, selected, position, response)
 
-            return selected, certainty, int(position), response
+                return selected, certainty, int(position), response
 
     def find_and_select_differences(self, candidates, single_candidate=None):
         unique_attributes = {candidate: [] for candidate in candidates}
