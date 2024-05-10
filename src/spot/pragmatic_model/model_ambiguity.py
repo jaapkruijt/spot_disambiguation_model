@@ -284,11 +284,15 @@ class Disambiguator:
         for i, candidate in enumerate(sorted_candidates):
             if i == 0:
                 top_candidates.append(candidate)
+                logging.debug("Added character %s to candidates", candidate)
+            elif i == len(sorted_candidates)-1:
+                continue
             else:
                 if sorted_candidates_scores[sorted_candidates[i-1]] - sorted_candidates_scores[candidate] > \
                         (sorted_candidates_scores[candidate] - sorted_candidates_scores[sorted_candidates[i+1]])/2:
                     break
                 else:
+                    logging.debug("Added character %s to candidates", candidate)
                     top_candidates.append(candidate)
 
         # case: one top candidate
@@ -393,6 +397,8 @@ class Disambiguator:
                 attribute_options = [attribute for feature, attribute in self.world[candidate_guess].items()
                                      if feature != 'gender']
                 difference = random.choice(attribute_options)
+                if isinstance(difference, list):
+                    difference = random.choice(difference)
                 logging.debug("No unique features found")
         else:
             candidate_guess = random.choice(candidates)
@@ -404,6 +410,8 @@ class Disambiguator:
                 attribute_options = [attribute for feature, attribute in self.world[candidate_guess].items()
                                      if feature != 'gender']
                 difference = random.choice(attribute_options)
+                if isinstance(difference, list):
+                    difference = random.choice(difference)
                 logging.debug("No differences found")
 
         phrase = self.format_response_phrase(self.world[candidate_guess]['gender'], difference)

@@ -38,6 +38,8 @@ test_phrases = [
     "de kale"
 ]
 
+test_phrases_ambiguity = ['man']*28
+
 correct = [10, 3, 2, 1, 1, 9, 2, 3, 2, 4, 1, 3, 1, 3, 13, 2, 14, 2, 1, 3, 1, 3, 6, 2, 1, 2, 11, 3]
 
 introductions = ["daar staat", "dat is", "ik heb", "ik heb daar", "daar heb ik", "op die plek staat"]

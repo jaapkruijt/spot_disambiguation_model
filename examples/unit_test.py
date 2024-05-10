@@ -1,5 +1,5 @@
 from spot.pragmatic_model.model_ambiguity import Disambiguator, DisambiguatorStatus
-from test_world import test_scene, test_phrases, introductions, correct
+from test_world import test_scene, test_phrases, introductions, correct, test_phrases_ambiguity
 from spot.pragmatic_model.world_short_phrases_nl import ak_characters
 from spot.pragmatic_model.detect_mentions import subtree_right_approach
 from datetime import datetime
@@ -12,7 +12,7 @@ def test_disambiguator(disambiguator, use_intro=False):
     disambiguator.advance_round(start=True)
     current_pos = 1
     predictions = []
-    for j, phrase in enumerate(test_phrases):
+    for j, phrase in enumerate(test_phrases_ambiguity):
         if use_intro:
             if random.random() > 0.5:
                 phrase_intro = random.choice(introductions)
@@ -55,7 +55,7 @@ if __name__ == "__main__":
                         datefmt='%Y-%m-%d %H:%M:%S',
     )
 
-    disambiguator = Disambiguator(ak_characters, test_scene, high_engagement=True)
+    disambiguator = Disambiguator(ak_characters, test_scene, high_engagement=False)
 
     preds = test_disambiguator(disambiguator, use_intro=True)
     logging.debug("-------RESULTS--------")
