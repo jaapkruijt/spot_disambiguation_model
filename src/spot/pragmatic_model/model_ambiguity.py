@@ -78,7 +78,7 @@ class DisambiguatorStatus(Enum):
 
 
 class Disambiguator:
-    def __init__(self, world, scenes, high_engagement=bool):
+    def __init__(self, world, scenes, high_engagement=bool, force_commit: bool = True):
         '''
         Initialize the disambiguator with a closed game world consisting of scenes and positions of characters in the
         scenes, and visual information about the characters. Sets the current round to 0, and initializes the Common
@@ -89,6 +89,7 @@ class Disambiguator:
         the robot does not use mentions other than 'die'/'that one'
         '''
         self._status = DisambiguatorStatus.AWAIT_NEXT
+        self._uncommitted_status = None
         self.common_ground = CommonGround()
         self.lexicon = Lexicon()
         self.scorer = SimilarityScorer()
@@ -99,6 +100,8 @@ class Disambiguator:
         self.high_engagement = high_engagement
         self.vectorizer = TfidfVectorizer()
         self.nlp = spacy.load('nl_core_news_lg')
+
+        self._force_commit = force_commit
 
     def status(self):
         '''
@@ -179,8 +182,13 @@ class Disambiguator:
         self.common_ground.positions_discussed[str(self.current_round)][self.common_ground.current_position] = selection
         self.common_ground.update_priors(self.scene_characters, character_mentioned=selection)
 
+    def commit_status(self):
+        self._status = self._uncommitted_status[0]
+        self.common_ground.add_under_discussion(*self._uncommitted_status[1:])
+        self._uncommitted_status = None
+
     def disambiguate(self, mention, approach='full', history_factor=1.0, test=False, literal_threshold=0.7,
-                     history_threshold=0.4, split_size=2, certainty_threshold=0.60, timeout=False):
+                     history_threshold=0.4, split_size=2, certainty_threshold=0.60, force_commit=True):
         """
         Main function of the disambiguator used to identify a character based on a description. First checks its status
         to determine whether repair is necessary. Combines a literal cosine-similarity-based score with a score based on
@@ -194,7 +202,7 @@ class Disambiguator:
         :param history_threshold: float
         :param split_size: int
         :param certainty_threshold: float
-        :return: selection, certainty, position, difference
+        :return: selection, certainty, position, difference, await continuation
         """
         # Strip the mention of any leading or trailing spaces and punctuation
         mention.strip()
@@ -210,11 +218,11 @@ class Disambiguator:
                 position = self.common_ground.under_discussion['position'][-1]
                 response = self.common_ground.under_discussion['response'][-1]
 
-                return selected, 1.0, int(position), response
+                return selected, 1.0, int(position), response, False
             # TODO duplicate code, see line 268
             elif re.search(r"\bnee\b", mention.lower()):
                 self._status = DisambiguatorStatus.NEG_RESPONSE
-                return '0', 1.0, None, None
+                return '0', 1.0, None, None, False
 
         # compute similarity scores with history
         history_score = self.mention_history_scoring(mention, history_threshold)
@@ -265,11 +273,12 @@ class Disambiguator:
             if re.search(r"\bnee\b", mention.lower()):
                 self._status = DisambiguatorStatus.NEG_RESPONSE
                 return '0', 1.0, None, None, False
-            if timeout:
+            if force_commit or self._force_commit:
                 self._status = DisambiguatorStatus.NO_MATCH
                 self.common_ground.add_under_discussion(mention, selected)
                 return selected, 1.0, None, None, False
             else:
+                self._uncommitted_status = (DisambiguatorStatus.NO_MATCH, mention, selected, None, None)
                 return selected, 1.0, None, None, True
 
         # find top candidate and compute certainty
@@ -354,7 +363,7 @@ class Disambiguator:
                 self.common_ground.add_under_discussion(mention, selected, position, response)
                 return selected, certainty, int(position), response, False
             else:
-                if timeout:
+                if force_commit or self._force_commit:
                     self._status = DisambiguatorStatus.MATCH_MULTIPLE
                 if approach == 'full':
                     top_candidate_attributes = {candidate: attributes for candidate, attributes
@@ -377,12 +386,12 @@ class Disambiguator:
                     response, selected = self.find_and_select_differences(top_candidates)
                     position = self.scenes[str(self.current_round)][selected]
 
-                self.common_ground.add_under_discussion(mention, selected, position, response)
-
-                if not timeout:
-                    return selected, certainty, int(position), response, True
-                else:
+                if force_commit or self._force_commit:
+                    self.common_ground.add_under_discussion(mention, selected, position, response)
                     return selected, certainty, int(position), response, False
+                else:
+                    self._uncommitted_status = (DisambiguatorStatus.MATCH_MULTIPLE, mention, selected, position, response)
+                    return selected, certainty, int(position), response, True
 
     def find_and_select_differences(self, candidates, single_candidate=None):
         unique_attributes = {candidate: [] for candidate in candidates}
