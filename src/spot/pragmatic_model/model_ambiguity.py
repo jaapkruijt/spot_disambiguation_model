@@ -161,10 +161,7 @@ class Disambiguator:
 
         :return: NA
         '''
-        try:  # THIS LINE FOR TESTING ONLY
-            selection = self.common_ground.under_discussion['guess'][-1]
-        except IndexError:  # THIS LINE FOR TESTING ONLY
-            selection = '0'  # THIS LINE FOR TESTING ONLY
+        selection = self.common_ground.under_discussion['guess'][-1]
         mention = self.common_ground.under_discussion['mention'][-1]
         logging.debug('Selection: %s', selection)
         logging.debug('Mention added to history: %s', mention)
@@ -183,7 +180,7 @@ class Disambiguator:
         self.common_ground.update_priors(self.scene_characters, character_mentioned=selection)
 
     def disambiguate(self, mention, approach='full', history_factor=1.0, test=False, literal_threshold=0.7,
-                     history_threshold=0.4, split_size=2, certainty_threshold=0.60):
+                     history_threshold=0.4, split_size=2, certainty_threshold=0.60, timeout=False):
         """
         Main function of the disambiguator used to identify a character based on a description. First checks its status
         to determine whether repair is necessary. Combines a literal cosine-similarity-based score with a score based on
@@ -243,7 +240,7 @@ class Disambiguator:
         # logging.debug("Scores after prior: %s", literal_candidate_scores)
 
         # lower probability for original guess in case of negative feedback
-        if self.status() in ['MATCH_PREVIOUS', 'MATCH_MULTIPLE', 'SUCCESS_LOW']:
+        if self.status() in ['MATCH_PREVIOUS', 'SUCCESS_LOW', 'NEG_RESPONSE']:
             # TODO check if too thorough
             for previous_guess in self.common_ground.under_discussion['guess']:
                 literal_candidate_scores[previous_guess] -= 0.1
@@ -267,10 +264,13 @@ class Disambiguator:
             # TODO duplicate code, see line 218
             if re.search(r"\bnee\b", mention.lower()):
                 self._status = DisambiguatorStatus.NEG_RESPONSE
-                return '0', 1.0, None, None
-            self._status = DisambiguatorStatus.NO_MATCH
-            self.common_ground.add_under_discussion(mention)
-            return selected, 1.0, None, None
+                return '0', 1.0, None, None, False
+            if timeout:
+                self._status = DisambiguatorStatus.NO_MATCH
+                self.common_ground.add_under_discussion(mention, selected)
+                return selected, 1.0, None, None, False
+            else:
+                return selected, 1.0, None, None, True
 
         # find top candidate and compute certainty
         uniform = [1/len(sorted_scores)]*len(sorted_scores)
@@ -303,7 +303,7 @@ class Disambiguator:
 
                 position = self.scenes[str(self.current_round)][selected]
                 self.common_ground.add_under_discussion(mention, selected, position)
-                return selected, certainty, int(position), None
+                return selected, certainty, int(position), None, False
             else:
                 if certainty > certainty_threshold:
                     self._status = DisambiguatorStatus.SUCCESS_HIGH
@@ -318,7 +318,7 @@ class Disambiguator:
                         except IndexError:
                             response = 'die'
                     self.common_ground.add_under_discussion(mention, selected, position, response)
-                    return selected, certainty, int(position), response
+                    return selected, certainty, int(position), response, False
                 else:
                     self._status = DisambiguatorStatus.SUCCESS_LOW
                     if selected in self.common_ground.preferred_convention:
@@ -328,7 +328,7 @@ class Disambiguator:
                                                                               single_candidate=selected)
                     position = self.scenes[str(self.current_round)][selected]
                     self.common_ground.add_under_discussion(mention, selected, position, response)
-                    return selected, certainty, int(position), response
+                    return selected, certainty, int(position), response, False
 
         # case: more than one top candidate
         if len(top_candidates) > 1:
@@ -341,7 +341,7 @@ class Disambiguator:
                 selected = top_candidates[0]
                 position = self.scenes[str(self.current_round)][selected]
                 self.common_ground.add_under_discussion(mention, selected, position)
-                return selected, certainty, int(position), None
+                return selected, certainty, int(position), None, False
             elif len(available_candidates) == 1:
                 selected = available_candidates[0]
                 self._status = DisambiguatorStatus.SUCCESS_LOW
@@ -352,9 +352,10 @@ class Disambiguator:
                                                                           single_candidate=selected)
                 position = self.scenes[str(self.current_round)][selected]
                 self.common_ground.add_under_discussion(mention, selected, position, response)
-                return selected, certainty, int(position), response
+                return selected, certainty, int(position), response, False
             else:
-                self._status = DisambiguatorStatus.MATCH_MULTIPLE
+                if timeout:
+                    self._status = DisambiguatorStatus.MATCH_MULTIPLE
                 if approach == 'full':
                     top_candidate_attributes = {candidate: attributes for candidate, attributes
                                                 in literal_candidate_attributes.items() if candidate in top_candidates}
@@ -378,7 +379,10 @@ class Disambiguator:
 
                 self.common_ground.add_under_discussion(mention, selected, position, response)
 
-                return selected, certainty, int(position), response
+                if not timeout:
+                    return selected, certainty, int(position), response, True
+                else:
+                    return selected, certainty, int(position), response, False
 
     def find_and_select_differences(self, candidates, single_candidate=None):
         unique_attributes = {candidate: [] for candidate in candidates}
