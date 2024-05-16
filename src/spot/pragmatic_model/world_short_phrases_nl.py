@@ -17,7 +17,7 @@ ak8 = {'gender': ['jongen', 'jongetje'], 'age': ['jong', 'kind'], 'hair_style': 
 ak9 = {'gender': ['vrouw', 'mevrouw'], 'age': 'oud', 'hair_style': 'kort haar',
         'hair_color': 'blond haar', 'hair_type': 'stijl', 'accessory': 'bril'}
 ak10 = {'gender': ['vrouw', 'mevrouw'], 'hair_style': 'lang haar',
-        'hair_color': 'bruin haar', 'hair_type': 'golvend haar'}
+        'hair_color': ['bruin haar', 'donker haar'], 'hair_type': 'golvend haar'}
 ak11 = {'gender': ['vrouw', 'mevrouw'], 'hair_style': 'lang haar',
         'hair_color': ['donker haar', 'bruin haar'], 'hair_type': 'stijl', 'accessory': 'bril'}
 ak12 = {'gender': ['vrouw', 'mevrouw'], 'hair_style': 'bob',

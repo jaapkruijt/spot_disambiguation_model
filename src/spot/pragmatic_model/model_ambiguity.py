@@ -642,7 +642,7 @@ class Disambiguator:
             phrase = f"die kale {sex}"
         elif difference == 'stijl':
             phrase = f"die {sex} met stijl haar"
-        elif difference in ['man', 'vrouw', 'jongen']:
+        elif difference in ['man', 'vrouw', 'jongen', 'meneer', 'mevrouw']:
             phrase = f"die {difference}"
         elif difference in ['kind', 'jongetje', 'meisje']:
             phrase = f"dat {difference}"
