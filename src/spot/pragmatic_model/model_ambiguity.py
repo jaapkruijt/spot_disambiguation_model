@@ -139,7 +139,7 @@ class Disambiguator:
         # TODO should not return anything, check!
         return self.lexicon.pragmatic_lexicon()
 
-    def advance_position(self, position=None):
+    def advance_position(self, position=None, skip=False):
         '''
         Called to move the disambiguator to the next position in a round. Updates the disambiguator status and
         adds information for the last character discussed to the common ground
@@ -147,7 +147,8 @@ class Disambiguator:
         If not supplied, moves up one position from the current.
         :return: NA
         '''
-        self.confirm_character_position()
+        if not skip:
+            self.confirm_character_position()
         self._status = DisambiguatorStatus.AWAIT_NEXT
         if position:
             self.common_ground.current_position = position
@@ -247,13 +248,17 @@ class Disambiguator:
         #                   for character in literal_candidate_scores.keys()]
         # logging.debug("Scores after prior: %s", literal_candidate_scores)
 
-        # lower probability for original guess in case of negative feedback
-        if self.status() in ['MATCH_PREVIOUS', 'SUCCESS_LOW', 'NEG_RESPONSE']:
-            # TODO check if too thorough
-            for previous_guess in self.common_ground.under_discussion['guess']:
-                literal_candidate_scores[previous_guess] -= 0.1
-                if literal_candidate_scores[previous_guess] < 0.0:
-                    literal_candidate_scores[previous_guess] = 0.0
+        # TODO
+        try:
+            # lower probability for original guess in case of negative feedback
+            if self.status() in ['MATCH_PREVIOUS', 'SUCCESS_LOW', 'NEG_RESPONSE']:
+                # TODO check if too thorough
+                for previous_guess in self.common_ground.under_discussion['guess']:
+                    literal_candidate_scores[previous_guess] -= 0.1
+                    if literal_candidate_scores[previous_guess] < 0.0:
+                        literal_candidate_scores[previous_guess] = 0.0
+        except Exception as e:
+            logging.exception("Failed to lower probability")
 
         # normalize scores to get distribution summing to one
         literal_candidate_scores = normalize(literal_candidate_scores)
