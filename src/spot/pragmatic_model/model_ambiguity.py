@@ -478,7 +478,7 @@ class Disambiguator:
 
     def find_losing_hair_colours(self, match):
         colours = {}
-        hair_colours = ['bruin haar', 'grijs haar', 'zwart haar', 'blond haar']
+        hair_colours = ['bruin haar', 'grijs haar', 'zwart haar', 'blond haar', 'donkerblond haar']
         for score, attribute in match:
             if attribute in hair_colours:
                 colours[attribute] = score
@@ -491,7 +491,7 @@ class Disambiguator:
 
     def find_losing_hair_lengths(self, match):
         lengths = {}
-        hair_lengths = ['kort haar', 'lang haar']
+        hair_lengths = ['kort haar', 'lang haar', 'halflang haar']
         for score, attribute in match:
             if attribute in hair_lengths:
                 lengths[attribute] = score
@@ -620,15 +620,18 @@ class Disambiguator:
 
     def format_response_phrase(self, sex, difference):
         if difference in ['jong', 'oud']:
-            phrase = f"die {difference}e {sex}"
+            if sex in ['jongetje', 'meisje']:
+                phrase = f"dat {difference}e {sex}"
+            else:
+                phrase = f"die {difference}e {sex}"
         elif difference == 'kaal':
             phrase = f"die kale {sex}"
         elif difference == 'stijl':
             phrase = f"die {sex} met stijl haar"
         elif difference in ['man', 'vrouw', 'jongen']:
             phrase = f"die {difference}"
-        elif difference == 'kind':
-            phrase = "dat kind"
+        elif difference in ['kind', 'jongetje', 'meisje']:
+            phrase = f"dat {difference}"
         else:
             phrase = f"die {sex} met {difference}"
 

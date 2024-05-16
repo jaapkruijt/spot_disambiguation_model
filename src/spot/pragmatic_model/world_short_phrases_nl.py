@@ -22,11 +22,37 @@ ak11 = {'gender': 'vrouw', 'hair_style': 'lang haar',
         'hair_color': 'bruin haar', 'hair_type': 'stijl', 'accessory': 'bril'}
 ak12 = {'gender': 'vrouw', 'hair_style': 'bob',
         'hair_color': 'bruin haar', 'hair_type': 'golvend haar'}
-ak13 = {'gender': 'man', 'age': 'oud', 'hair_style': 'kaal'}
-ak14 = {'gender': 'man', 'hair_style': 'kuif',
+ak13 = {'gender': 'man', 'hair_style': 'kort haar', 'hair_color': 'bruin', 'hair_type': 'krullen'}
+ak14 = {'gender': 'man', 'hair_style': 'netjes haar',
         'hair_color': 'bruin haar', 'hair_type': 'stijl', 'facial_hair': 'baard'}
 ak15 = {'gender': 'man', 'hair_style': 'kort haar',
         'hair_color': ['zwart haar', 'bruin haar'], 'hair_type': 'stekels'}
+sp16 = {'gender': 'vrouw', 'hair_style': ['lang haar'], 'hair_color': 'bruin haar', 'hair_type': 'stijl'}
+sp17 = {'gender': 'vrouw', 'hair_type': 'golvend haar', 'hair_color': ['blond haar', 'donkerblond haar'], 'hair_style': ['halflang haar', 'bob']}
+sp18 = {'gender': 'vrouw', 'hair_style': 'lang haar', 'hair_color': 'bruin haar', 'hair_type': 'stijl'}
+sp19 = {'gender': 'vrouw', 'hair_style': 'halflang haar', 'hair_color': 'blond haar', 'hair_type': 'stijl'}
+sp20 = {'gender': 'man', 'hair_style': 'kort haar', 'hair_color': 'bruin haar', 'hair_type': 'stekels', 'facial hair': 'baardje'}
+sp21 = {'gender': 'man', 'hair_style': 'kort haar', 'hair_color': 'bruin haar', 'hair_type': 'krullen', 'facial hair': 'baardje'}
+sp22 = {'gender': 'vrouw', 'hair_style': 'kort haar', 'hair_color': 'bruin haar', 'hair_type': 'stijl', 'accessory': 'oorbellen'}
+sp23 = {'gender': 'vrouw', 'hair_style': ['bob', 'halflang haar'], 'hair_color': ['donkerblond haar', 'bruin haar'], 'hair_type': 'stijl'}
+sp24 = {'gender': 'vrouw', 'hair_style': 'staart', 'hair_color': 'blond haar', 'hair_type': 'stijl'}
+sp25 = {'gender': 'man', 'hair_style': 'kort haar', 'hair_color': 'bruin haar'}
+sp26 = {'gender': 'man', 'hair_style': 'kort haar', 'hair_color': 'bruin', 'hair_type': 'stekels', 'facial_hair': 'baardje'}
+sp27 = {'gender': 'man', 'hair_style': 'kort haar', 'hair_color': 'bruin haar', 'hair_type': 'stijl', 'facial_hair': 'baardje'}
+sp28 = {'gender': 'man', 'hair_style': 'kort haar', 'hair_color': 'bruin haar', 'hair_type': 'stijl', 'accessory': 'bril'}
+sp29 = {'gender': 'vrouw', 'hair_style': 'lang haar', 'hair_color': 'blond haar', 'hair_type': 'stijl', 'accessory': 'oorbellen'}
+sp30 = {'gender': 'man', 'hair_style': 'kort haar', 'hair_color': 'bruin haar', 'hair_type': 'netjes haar'}
+sp31 = {'gender': 'vrouw', 'hair_style': 'bob', 'hair_color': 'bruin', 'hair_type': 'stijl'}
+sp32 = {'gender': 'man', 'hair_style': 'kort haar', 'hair_color': 'grijs haar', 'hair_type': 'stijl', 'accessory': 'bril'}
+sp33 = {'gender': 'man', 'hair_style': 'kort haar', 'hair_color': 'bruin haar', 'hair_type': 'stekels', 'facial_hair': 'baardje'}
+sp34 = {'gender': 'man', 'hair_style': 'kort haar', 'hair_color': 'bruin haar', 'hair_type': 'krullen', 'accessory': ['bril', 'zonnebril']}
+sp35 = {'gender': 'man', 'hair_style': 'kort haar', 'hair_color': 'bruin haar', 'hair_type': 'kuif', 'accessory': 'bril'}
+sp36 = {'gender': 'man', 'hair_style': 'kort haar', 'hair_color': ['blond haar', 'donkerblond haar'], 'hair_type': 'krullen'}
+sp37 = {'gender': 'man', 'hair_style': 'kort haar', 'hair_color': 'bruin haar', 'hair_type': 'stijl'}
+sp38 = {'gender': 'vrouw', 'hair_style': ['halflang haar', 'lang haar'], 'hair_color': 'bruin haar', 'hair_type': 'stijl haar', 'accessory': 'oorbellen'}
+sp39 = {'gender': 'meisje', 'age': ['jong', 'kind'], 'hair_color': 'donkerblond haar', 'hair_style': ['kort haar', 'bob'], 'hair_type': 'stijl'}
+sp40 = {'gender': 'vrouw', 'hair_style': 'kort haar', 'hair_color': ['donkerblond haar', 'bruin haar'], 'hair_type': 'stijl'}
+
 
 ak_characters = {'1': ak1, '2': ak2, '3': ak3, '4': ak4, '5': ak5, '6': ak6, '7': ak7,
                  '8': ak8, '9': ak9, '10': ak10, '11': ak11, '12': ak12, '13': ak13, '14': ak14, '15': ak15}
