@@ -327,7 +327,7 @@ class Disambiguator:
                         response = self.common_ground.preferred_convention[selected]
                     else:
                         try:
-                            response = self.format_response_phrase(self.world[selected]['gender'],
+                            response = self.format_response_phrase(random.choice(self.world[selected]['gender']),
                                                                random.choice(list(literal_candidate_attributes[selected])))
                         except IndexError:
                             response = 'die'
@@ -432,7 +432,7 @@ class Disambiguator:
                     difference = random.choice(difference)
                 logging.debug("No differences found")
 
-        phrase = self.format_response_phrase(self.world[candidate_guess]['gender'], difference)
+        phrase = self.format_response_phrase(random.choice(self.world[candidate_guess]['gender']), difference)
 
         return phrase, candidate_guess
 
@@ -492,7 +492,7 @@ class Disambiguator:
 
     def find_losing_hair_colours(self, match):
         colours = {}
-        hair_colours = ['bruin haar', 'grijs haar', 'zwart haar', 'blond haar', 'donkerblond haar']
+        hair_colours = ['bruin haar', 'grijs haar', 'zwart haar', 'blond haar', 'donkerblond haar', 'donker haar']
         for score, attribute in match:
             if attribute in hair_colours:
                 colours[attribute] = score
