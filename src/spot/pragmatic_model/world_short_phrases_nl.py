@@ -6,7 +6,7 @@ ak3 = {'gender': ['man', 'meneer'], 'hair_style': 'kaal',
        'facial_hair': 'baard'}
 ak4 = {'gender': ['man', 'meneer'], 'hair_style': 'kort haar', 'hair_color': 'bruin haar',
        'hair_type': 'krulhaar', 'accessory': 'bril'}
-ak5 = {'gender': ['man', 'meneer'], 'hair_style': 'kaal', 'hair_color': 'bruin haar',
+ak5 = {'gender': ['man', 'meneer'], 'hair_style': ['kaal', 'kort haar'], 'hair_color': 'bruin haar',
         'facial_hair': 'baard'}
 ak6 = {'gender': ['vrouw', 'mevrouw'], 'hair_style': 'bob', 'hair_color': ['donker haar', 'zwart haar', 'bruin haar'],
        'hair_type': 'stijl'}
@@ -76,7 +76,7 @@ sp_robot_scene = {1: {'1': {'1': '1', '2': '3', '3': '2', '10': '5', '14': '4'},
                   '2': {'1': '3', '2': '2', '3': '1', '12': '4', '4': '5'},
                   '3': {'1': '5', '2': '2', '3': '4', '8': '3', '9': '1'},
                   '4': {'1': '3', '2': '2', '3': '1', '6': '5', '15': '4'},
-                  '5': {'1': '5', '2': '2', '3': '4', '13': '1', '11': '3'},
+                  '5': {'1': '5', '2': '2', '3': '4', '36': '1', '11': '3'},
                   '6': {'1': '1', '2': '3', '3': '2', '7': '4', '5': '4'}},
                   2: {'1': {'1': '1', '2': '3', '3': '2', '31': '5', '30': '4'},
                   '2': {'1': '3', '2': '2', '3': '1', '39': '4', '34': '5'},
