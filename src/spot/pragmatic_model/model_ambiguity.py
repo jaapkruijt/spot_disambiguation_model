@@ -662,10 +662,13 @@ class Disambiguator:
 
     def load_interaction(self, storage_dir, participant, interaction):
         path = f'{storage_dir}/conventions'
-        with open(os.path.join(path, f'pp_{participant}_int{interaction}_history.json'), 'w') as filename:
+        with open(os.path.join(path, f'pp_{participant}_int{interaction}_history.json'), 'r') as filename:
             common_ground = json.load(filename)
+            logging.debug("Loaded interaction")
             self.common_ground.history = common_ground['history']
             self.common_ground.preferred_convention = common_ground['conventions']
+            for character, convention in self.common_ground.preferred_convention.items():
+                logging.debug("Loaded convention %s for character %s", character, convention)
 
 
 class CommonGround:
