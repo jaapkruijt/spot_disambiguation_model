@@ -173,7 +173,7 @@ class Disambiguator:
             self.common_ground.history[selection]['human'].append(mention)
         else:
             self.common_ground.history[selection] = {'human': [mention]}
-        if self.high_engagement:
+        if self.high_engagement and self.common_ground.under_discussion['response']:
             response = self.common_ground.under_discussion['response'][-1]
             if response:
                 if 'robot' in self.common_ground.history[selection].keys():
