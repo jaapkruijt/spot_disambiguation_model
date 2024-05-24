@@ -103,11 +103,14 @@ class Disambiguator:
 
         self._force_commit = force_commit
 
-    def status(self):
+    def status(self, uncommitted=False):
         '''
         Returns the name of the current DisambiguatorStatus
         :return: str
         '''
+        if uncommitted and self._uncommitted_status:
+            return self._uncommitted_status[0]
+
         return self._status.name
 
     def advance_round(self, round_number=None, start=False):
@@ -277,7 +280,7 @@ class Disambiguator:
             # TODO duplicate code, see line 218
             if re.search(r"\bnee\b", mention.lower()):
                 self._status = DisambiguatorStatus.NEG_RESPONSE
-                return '0', 1.0, None, None, False
+                return selected, 1.0, None, None, False
             if force_commit or self._force_commit:
                 self._status = DisambiguatorStatus.NO_MATCH
                 self.common_ground.add_under_discussion(mention, selected)
