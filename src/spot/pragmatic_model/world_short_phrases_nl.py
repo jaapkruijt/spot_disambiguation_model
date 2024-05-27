@@ -50,7 +50,7 @@ sp35 = {'gender': ['man', 'meneer'], 'hair_style': 'kort haar', 'hair_color': ['
 sp36 = {'gender': ['man', 'meneer'], 'hair_style': 'kort haar', 'hair_color': ['blond haar', 'donkerblond haar'], 'hair_type': 'krullen'}
 sp37 = {'gender': ['man', 'meneer'], 'hair_style': 'kort haar', 'hair_color': ['donker haar', 'bruin haar'], 'hair_type': 'stijl'}
 sp38 = {'gender': ['vrouw', 'mevrouw'], 'hair_style': ['halflang haar', 'lang haar'], 'hair_color': ['donker haar', 'bruin haar'], 'hair_type': 'stijl haar', 'accessory': 'oorbellen'}
-sp39 = {'gender': ['meisje'], 'age': ['jong', 'kind'], 'hair_color': 'donkerblond haar', 'hair_style': ['kort haar', 'bob'], 'hair_type': 'stijl'}
+sp39 = {'gender': ['meisje', 'jongetje'], 'age': ['jong', 'kind'], 'hair_color': 'donkerblond haar', 'hair_style': ['kort haar', 'bob'], 'hair_type': 'stijl'}
 sp40 = {'gender': ['vrouw', 'mevrouw'], 'hair_style': 'kort haar', 'hair_color': ['donkerblond haar', 'bruin haar'], 'hair_type': 'stijl'}
 sp41 = {'gender': ['man', 'meneer'], 'hair_style': 'kort haar', 'hair_color': 'blond haar', 'hair_type': 'golvend haar', 'accessory': 'bril'}
 
@@ -83,7 +83,7 @@ sp_robot_scene = {1: {'1': {'1': '1', '2': '3', '3': '2', '10': '5', '14': '4'},
                   '3': {'1': '5', '2': '2', '3': '4', '38': '3', '13': '1'},
                   '4': {'1': '3', '2': '2', '3': '1', '22': '5', '37': '4'},
                   '5': {'1': '5', '2': '2', '3': '4', '17': '1', '41': '3'},
-                  '6': {'1': '1', '2': '3', '3': '2', '16': '4', '34': '5'}},
+                  '6': {'1': '1', '2': '3', '3': '2', '16': '4', '35': '5'}},
                   3: {'1': {'1': '1', '2': '3', '3': '2', '24': '5', '25': '4'},
                   '2': {'1': '3', '2': '2', '3': '1', '28': '4', '23': '5'},
                   '3': {'1': '5', '2': '2', '3': '4', '19': '3', '21': '1'},
