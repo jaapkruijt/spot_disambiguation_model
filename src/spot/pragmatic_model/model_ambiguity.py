@@ -338,8 +338,12 @@ class Disambiguator:
                     return selected, certainty, int(position), response, False
                 else:
                     self._status = DisambiguatorStatus.SUCCESS_LOW
-                    if selected in self.common_ground.preferred_convention:
-                        response = self.common_ground.preferred_convention[selected]
+                    if self.high_engagement:
+                        if selected in self.common_ground.preferred_convention:
+                            response = self.common_ground.preferred_convention[selected]
+                        else:
+                            response, selected = self.find_and_select_differences(self.scene_characters,
+                                                                              single_candidate=selected)
                     else:
                         response, selected = self.find_and_select_differences(self.scene_characters,
                                                                               single_candidate=selected)
@@ -658,7 +662,8 @@ class Disambiguator:
         path = f'{storage_dir}/conventions'
         Path(path).mkdir(parents=True, exist_ok=True)
 
-        common_ground = {'history': self.common_ground.history, 'conventions': self.common_ground.preferred_convention}
+        common_ground = {'history': self.common_ground.history, 'conventions': self.common_ground.preferred_convention,
+                         'discussed': self.common_ground.positions_discussed}
 
         with open(os.path.join(path, f'pp_{participant}_int{interaction}_history.json'), 'w') as fname:
             json.dump(common_ground, fname)
