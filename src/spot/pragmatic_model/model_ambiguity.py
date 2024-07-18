@@ -78,7 +78,7 @@ class DisambiguatorStatus(Enum):
 
 
 class Disambiguator:
-    def __init__(self, world, scenes, high_engagement=bool, force_commit: bool = True):
+    def __init__(self, world, scenes, high_engagement=bool, force_commit: bool = True, language='nl'):
         '''
         Initialize the disambiguator with a closed game world consisting of scenes and positions of characters in the
         scenes, and visual information about the characters. Sets the current round to 0, and initializes the Common
@@ -99,7 +99,11 @@ class Disambiguator:
         self.current_round = 0
         self.high_engagement = high_engagement
         self.vectorizer = TfidfVectorizer()
-        self.nlp = spacy.load('nl_core_news_lg')
+        self._language = language
+        if self._language == 'nl':
+            self.nlp = spacy.load('nl_core_news_lg')
+        elif self._language == 'en':
+            self.nlp = spacy.load('en_core_web_lg')
 
         self._force_commit = force_commit
 
@@ -330,10 +334,18 @@ class Disambiguator:
                         response = self.common_ground.preferred_convention[selected]
                     else:
                         try:
-                            response = self.format_response_phrase(random.choice(self.world[selected]['gender']),
+                            if self._language == 'nl':
+                                response = self.format_response_phrase_nl(random.choice(self.world[selected]['gender']),
                                                                random.choice(list(literal_candidate_attributes[selected])))
+                            elif self._language == 'en':
+                                response = self.format_response_phrase_en(random.choice(self.world[selected]['gender']),
+                                                                          random.choice(list(
+                                                                              literal_candidate_attributes[selected])))
                         except IndexError:
-                            response = 'die'
+                            if self._language == 'nl':
+                                response = 'die'
+                            elif self._language == 'en':
+                                response = 'that one'
                     self.common_ground.add_under_discussion(mention, selected, position, response)
                     return selected, certainty, int(position), response, False
                 else:
@@ -419,12 +431,13 @@ class Disambiguator:
                 logging.debug("Unique features: %s", unique_attributes[single_candidate])
                 difference = random.choice(unique_attributes[single_candidate])
             else:
-                attribute_options = [attribute for feature, attribute in self.world[candidate_guess].items()
-                                     if feature != 'gender']
-                difference = random.choice(attribute_options)
-                if isinstance(difference, list):
-                    difference = random.choice(difference)
-                logging.debug("No unique features found")
+                # attribute_options = [attribute for feature, attribute in self.world[candidate_guess].items()
+                #                      if feature != 'gender']
+                # difference = random.choice(attribute_options)
+                difference = self.pragmatic_attribute_selection(candidate_guess)
+                # if isinstance(difference, list):
+                #     difference = random.choice(difference)
+                logging.debug("Used pragmatic attribute selection")
         else:
             candidate_guess = random.choice(candidates)
             logging.debug("Random guess: %s", candidate_guess)
@@ -432,14 +445,18 @@ class Disambiguator:
                 logging.debug("Unique features for guess: %s", unique_attributes[candidate_guess])
                 difference = random.choice(unique_attributes[candidate_guess])
             else:
-                attribute_options = [attribute for feature, attribute in self.world[candidate_guess].items()
-                                     if feature != 'gender']
-                difference = random.choice(attribute_options)
-                if isinstance(difference, list):
-                    difference = random.choice(difference)
-                logging.debug("No differences found")
+                # attribute_options = [attribute for feature, attribute in self.world[candidate_guess].items()
+                #                      if feature != 'gender']
+                # difference = random.choice(attribute_options)
+                difference = self.pragmatic_attribute_selection(candidate_guess)
+                # if isinstance(difference, list):
+                    # difference = random.choice(difference)
+                logging.debug("Used pragmatic attribute selection")
 
-        phrase = self.format_response_phrase(random.choice(self.world[candidate_guess]['gender']), difference)
+        if self._language == 'nl':
+            phrase = self.format_response_phrase_nl(random.choice(self.world[candidate_guess]['gender']), difference)
+        elif self._language == 'en':
+            phrase = self.format_response_phrase_en(random.choice(self.world[candidate_guess]['gender']), difference)
 
         return phrase, candidate_guess
 
@@ -499,7 +516,10 @@ class Disambiguator:
 
     def find_losing_hair_colours(self, match):
         colours = {}
-        hair_colours = ['bruin haar', 'grijs haar', 'zwart haar', 'blond haar', 'donkerblond haar', 'donker haar']
+        if self._language == 'nl':
+            hair_colours = ['bruin haar', 'grijs haar', 'zwart haar', 'blond haar', 'donkerblond haar', 'donker haar']
+        elif self._language == 'en':
+            hair_colours = ['brown hair', 'grey hair', 'black hair', 'blonde hair', 'dark hair']
         for score, attribute in match:
             if attribute in hair_colours:
                 colours[attribute] = score
@@ -512,7 +532,10 @@ class Disambiguator:
 
     def find_losing_hair_lengths(self, match):
         lengths = {}
-        hair_lengths = ['kort haar', 'lang haar', 'halflang haar']
+        if self._language == 'nl':
+            hair_lengths = ['kort haar', 'lang haar', 'halflang haar']
+        elif self._language == 'en':
+            hair_lengths = ['short hair', 'long hair', 'medium-length hair']
         for score, attribute in match:
             if attribute in hair_lengths:
                 lengths[attribute] = score
@@ -532,6 +555,13 @@ class Disambiguator:
 
         return total
 
+
+    def pragmatic_attribute_selection(self, candidate):
+        candidate_attributes = self.lexicon.pragmatic_speaker_lexicon()[candidate]
+        ordered_attributes = dict(sorted(candidate_attributes.items(), key=lambda item: item[1], reverse=True))
+        attribute_selection = next(iter(ordered_attributes))
+
+        return attribute_selection
 
     def mention_history_scoring(self, mention, history_threshold=0.4):
         # TODO internal convention strength: number of rounds + internal sim score
@@ -639,7 +669,7 @@ class Disambiguator:
                         structure['head'] = subtree_span.text
                     self.common_ground.preferred_convention[character] = 'die ' + ' '.join([value for value in list(structure.values()) if value])
 
-    def format_response_phrase(self, sex, difference):
+    def format_response_phrase_nl(self, sex, difference):
         if difference in ['jong', 'oud']:
             if sex in ['jongetje', 'meisje']:
                 phrase = f"dat {difference}e {sex}"
@@ -655,6 +685,22 @@ class Disambiguator:
             phrase = f"dat {difference}"
         else:
             phrase = f"die {sex} met {difference}"
+
+        return phrase
+
+    def format_response_phrase_en(self, sex, difference):
+        if difference in ['young', 'old']:
+            phrase = f"the {difference} {sex}"
+        elif difference == 'bald':
+            phrase = f"the bald {sex}"
+        elif difference == 'straight':
+            phrase = f"the {sex} with straight hair"
+        elif difference in ['man', 'woman', 'child', 'kid', 'boy', 'girl']:
+            phrase = f"the {difference}"
+        elif difference == 'slick back':
+            phrase = f"the {sex} with a slick back"
+        else:
+            phrase = f"the {sex} with {difference}"
 
         return phrase
 
@@ -714,12 +760,16 @@ class Lexicon:
     def __init__(self):
         self._base_lexicon = {}
         self._pragmatic_lexicon = {}
+        self._pragmatic_speaker_lexicon = {}
 
     def base_lexicon(self):
         return self._base_lexicon
 
     def pragmatic_lexicon(self):
         return self._pragmatic_lexicon
+
+    def pragmatic_speaker_lexicon(self):
+        return self._pragmatic_speaker_lexicon
 
     def get_attributes(self, characters):
         """
@@ -789,6 +839,8 @@ class Lexicon:
             # for word, probability in speaker_probs[character].items():
             #     speaker_probs[character][word] = probability / probability_sum
             speaker_probs[character] = normalize(speaker_probs[character])
+
+        self._pragmatic_speaker_lexicon = speaker_probs
 
         return speaker_probs
 
