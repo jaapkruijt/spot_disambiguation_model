@@ -22,7 +22,7 @@ import re
 
 from tqdm import tqdm
 from string import punctuation
-from spot.pragmatic_model.detect_mentions import subtree_right_approach
+# from spot.pragmatic_model.detect_mentions import subtree_right_approach
 from collections import Counter
 
 # nlp = spacy.load('nl_core_news_lg')
@@ -619,6 +619,7 @@ class Disambiguator:
         return previous_mention_score
 
     def find_preferred_conventions(self, threshold=0.4):
+        determiner = {'nl': 'die', 'en': 'the'}
         mention_corpus = []
         mention_characters = []
         for character, history in self.common_ground.history.items():
@@ -667,7 +668,7 @@ class Disambiguator:
                         logging.debug("No modifiers found from head")
                         subtree_span = doc[relative_head['relative_head'].left_edge.i: relative_head['relative_head'].right_edge.i+1]
                         structure['head'] = subtree_span.text
-                    self.common_ground.preferred_convention[character] = 'die ' + ' '.join([value for value in list(structure.values()) if value])
+                    self.common_ground.preferred_convention[character] = determiner[self._language] + ' '.join([value for value in list(structure.values()) if value])
 
     def format_response_phrase_nl(self, sex, difference):
         if difference in ['jong', 'oud']:

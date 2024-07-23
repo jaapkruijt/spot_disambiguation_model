@@ -1,7 +1,7 @@
 from spot.pragmatic_model.model_ambiguity import Disambiguator, DisambiguatorStatus
 from test_world import test_scene, test_phrases, introductions, correct, test_phrases_ambiguity
-from spot.pragmatic_model.world_short_phrases_nl import ak_characters
-from spot.pragmatic_model.detect_mentions import subtree_right_approach
+from spot.pragmatic_model.world_short_phrases_en import sp_characters
+# from spot.pragmatic_model.detect_mentions import subtree_right_approach
 from datetime import datetime
 import logging
 import random
@@ -12,7 +12,7 @@ def test_disambiguator(disambiguator, use_intro=False):
     disambiguator.advance_round(start=True)
     current_pos = 1
     predictions = []
-    for j, phrase in enumerate(test_phrases_ambiguity):
+    for j, phrase in enumerate(test_phrases):
         if use_intro:
             if random.random() > 0.5:
                 phrase_intro = random.choice(introductions)
@@ -23,7 +23,7 @@ def test_disambiguator(disambiguator, use_intro=False):
         # mention = subtree_right_approach(phrase)
         # if not mention:
         #     mention = phrase
-        selection, certainty, position, response = disambiguator.disambiguate(phrase)
+        selection, certainty, position, response, wait = disambiguator.disambiguate(phrase)
         status = disambiguator.status()
         logging.debug("Disambiguator status: %s", status)
         logging.debug("Selected character %s with certainty %s", selection, certainty)
@@ -55,9 +55,9 @@ if __name__ == "__main__":
                         datefmt='%Y-%m-%d %H:%M:%S',
     )
 
-    disambiguator = Disambiguator(ak_characters, test_scene, high_engagement=False)
+    disambiguator = Disambiguator(sp_characters, test_scene, high_engagement=True, language='en')
 
-    preds = test_disambiguator(disambiguator, use_intro=True)
+    preds = test_disambiguator(disambiguator, use_intro=False)
     logging.debug("-------RESULTS--------")
     logging.debug("Precision: %s", precision_score(correct, preds, average='micro'))
     logging.debug("Recall: %s", recall_score(correct, preds, average='micro'))
