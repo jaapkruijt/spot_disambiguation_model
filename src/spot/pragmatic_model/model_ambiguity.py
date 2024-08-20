@@ -102,8 +102,12 @@ class Disambiguator:
         self._language = language
         if self._language == 'nl':
             self.nlp = spacy.load('nl_core_news_lg')
+            self.yes_regex = r"\bja\b"
+            self.no_regex = r"\bnee\b"
         elif self._language == 'en':
             self.nlp = spacy.load('en_core_web_lg')
+            self.yes_regex = r"\byes\b"
+            self.no_regex = r"\bno\b"
 
         self._force_commit = force_commit
 
@@ -220,7 +224,7 @@ class Disambiguator:
 
         # check if coming from repair, positive response or new input
         if self.status() == 'MATCH_MULTIPLE':
-            if re.search(r"\bja\b", mention.lower()):
+            if re.search(self.yes_regex, mention.lower()):
                 self._status = DisambiguatorStatus.SUCCESS_HIGH
                 selected = self.common_ground.under_discussion['guess'][-1]
                 position = self.common_ground.under_discussion['position'][-1]
@@ -228,7 +232,7 @@ class Disambiguator:
 
                 return selected, 1.0, int(position), response, False
             # TODO duplicate code, see line 268
-            elif re.search(r"\bnee\b", mention.lower()):
+            elif re.search(self.no_regex, mention.lower()):
                 self._status = DisambiguatorStatus.NEG_RESPONSE
                 return '0', 1.0, None, None, False
 
@@ -282,7 +286,7 @@ class Disambiguator:
         # In case no match was found
         if max_score == 0.0:
             # TODO duplicate code, see line 218
-            if re.search(r"\bnee\b", mention.lower()):
+            if re.search(self.no_regex, mention.lower()):
                 self._status = DisambiguatorStatus.NEG_RESPONSE
                 return selected, 1.0, None, None, False
             if force_commit or self._force_commit:
