@@ -559,7 +559,6 @@ class Disambiguator:
 
         return total
 
-
     def pragmatic_attribute_selection(self, candidate):
         candidate_attributes = self.lexicon.pragmatic_speaker_lexicon()[candidate]
         ordered_attributes = dict(sorted(candidate_attributes.items(), key=lambda item: item[1], reverse=True))
