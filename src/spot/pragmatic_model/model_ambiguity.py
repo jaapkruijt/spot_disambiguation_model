@@ -3,17 +3,17 @@ from pathlib import Path
 import math
 from enum import Enum
 import logging
-from scipy.stats import entropy
+# from scipy.stats import entropy
 from scipy.special import rel_entr
 from sklearn.feature_extraction.text import TfidfVectorizer
 import spacy
 import random
-from random import choice
+# from random import choice
 
 import torch
 from sentence_transformers import SentenceTransformer, util
-from spot.pragmatic_model.world_short_phrases_nl import ak_characters, ak_robot_scene
-from gensim.models import word2vec, KeyedVectors
+# from spot.pragmatic_model.world_short_phrases_nl import ak_characters, ak_robot_scene
+# from gensim.models import word2vec, KeyedVectors
 import numpy as np
 import json
 import os
@@ -31,7 +31,7 @@ w2vfile = '/Users/jaapkruijt/Documents/GitHub/spot_disambiguation_model/local_fi
 # wiki2vec = KeyedVectors.load_word2vec_format(filename)
 entity_mention_history = {}
 entity_history = []
-recencies = {str(i+1): 0 for i in range(len(ak_characters))}
+# recencies = {str(i+1): 0 for i in range(len(ak_characters))}
 
 
 class SimilarityScorer:
@@ -78,7 +78,8 @@ class DisambiguatorStatus(Enum):
 
 
 class Disambiguator:
-    def __init__(self, world, scenes, high_engagement=bool, force_commit: bool = True, language='nl'):
+    def __init__(self, world, scenes, high_engagement: bool = True, history_factor=1.0, force_commit: bool = True,
+                 language='nl'):
         '''
         Initialize the disambiguator with a closed game world consisting of scenes and positions of characters in the
         scenes, and visual information about the characters. Sets the current round to 0, and initializes the Common
@@ -100,6 +101,7 @@ class Disambiguator:
         self.high_engagement = high_engagement
         self.vectorizer = TfidfVectorizer()
         self._language = language
+        self._history_factor = history_factor
         if self._language == 'nl':
             self.nlp = spacy.load('nl_core_news_lg')
             self.yes_regex = r"\bja\b"
@@ -199,7 +201,7 @@ class Disambiguator:
         self.common_ground.add_under_discussion(*self._uncommitted_status[1:])
         self._uncommitted_status = None
 
-    def disambiguate(self, mention, approach='full', history_factor=1.0, test=False, literal_threshold=0.7,
+    def disambiguate(self, mention, approach='full', test=False, literal_threshold=0.7,
                      history_threshold=0.4, split_size=2, certainty_threshold=0.60, force_commit=True):
         """
         Main function of the disambiguator used to identify a character based on a description. First checks its status
@@ -248,7 +250,7 @@ class Disambiguator:
         # combine literal score and history score through weighted averaging
         for character, (score, weight) in history_score.items():
             literal_candidate_scores[character] = np.average(np.array([literal_candidate_scores[character], score]),
-                                                             weights=np.array([1.0, weight*history_factor]))
+                                                             weights=np.array([1.0, weight*self._history_factor]))
         # logging.debug("Scores after history scoring: %s", literal_candidate_scores)
 
         # update the prior probability for each character
@@ -898,19 +900,19 @@ def normalize(value_dict):
     return value_dict
 
 
-def rank_by_recency(entity_recencies, characters):
-    character_prior = {character: 1 / len(characters) for character in characters}
-    for entity, recency in entity_recencies.items():
-        recency_score = 1/(recency+1)
-        character_prior[entity] += recency_score
-    factor = 1.0 / sum(character_prior.values())
-    for character in character_prior:
-        character_prior[character] = character_prior[character] * factor
-    # recency_array = np.array(list(character_prior.values()))
-    # normalized_recencies = recency_array / sum(recency_array)
-    # character_priors = {character: prior for character in characters for prior in normalized_recencies}
-
-    return character_prior
+# def rank_by_recency(entity_recencies, characters):
+#     character_prior = {character: 1 / len(characters) for character in characters}
+#     for entity, recency in entity_recencies.items():
+#         recency_score = 1/(recency+1)
+#         character_prior[entity] += recency_score
+#     factor = 1.0 / sum(character_prior.values())
+#     for character in character_prior:
+#         character_prior[character] = character_prior[character] * factor
+#     # recency_array = np.array(list(character_prior.values()))
+#     # normalized_recencies = recency_array / sum(recency_array)
+#     # character_priors = {character: prior for character in characters for prior in normalized_recencies}
+#
+#     return character_prior
 
 
 if __name__ == "__main__":
