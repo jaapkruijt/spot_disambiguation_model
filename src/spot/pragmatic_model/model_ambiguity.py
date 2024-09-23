@@ -624,7 +624,7 @@ class Disambiguator:
         return previous_mention_score
 
     def find_preferred_conventions(self, threshold=0.4):
-        determiner = {'nl': 'die', 'en': 'the'}
+        determiner = {'nl': 'die ', 'en': 'the '}
         mention_corpus = []
         mention_characters = []
         for character, history in self.common_ground.history.items():
@@ -696,17 +696,17 @@ class Disambiguator:
 
     def format_response_phrase_en(self, sex, difference):
         if difference in ['young', 'old']:
-            phrase = f"the {difference} {sex}"
+            phrase = f"that {difference} {sex}"
         elif difference == 'bald':
-            phrase = f"the bald {sex}"
+            phrase = f"that bald {sex}"
         elif difference == 'straight':
-            phrase = f"the {sex} with straight hair"
+            phrase = f"that {sex} with straight hair"
         elif difference in ['man', 'woman', 'child', 'kid', 'boy', 'girl']:
-            phrase = f"the {difference}"
+            phrase = f"that {difference}"
         elif difference == 'slick back':
-            phrase = f"the {sex} with a slick back"
+            phrase = f"that {sex} with a slick back"
         else:
-            phrase = f"the {sex} with {difference}"
+            phrase = f"that {sex} with {difference}"
 
         return phrase
 
