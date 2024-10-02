@@ -696,17 +696,17 @@ class Disambiguator:
 
     def format_response_phrase_en(self, sex, difference):
         if difference in ['young', 'old']:
-            phrase = f"that {difference} {sex}"
+            phrase = f"the {difference} {sex}"
         elif difference == 'bald':
-            phrase = f"that bald {sex}"
+            phrase = f"the bald {sex}"
         elif difference == 'straight':
-            phrase = f"that {sex} with straight hair"
+            phrase = f"the {sex} with straight hair"
         elif difference in ['man', 'woman', 'child', 'kid', 'boy', 'girl']:
-            phrase = f"that {difference}"
+            phrase = f"the {difference}"
         elif difference == 'slick back':
-            phrase = f"that {sex} with a slick back"
+            phrase = f"the {sex} with a slick back"
         else:
-            phrase = f"that {sex} with {difference}"
+            phrase = f"the {sex} with {difference}"
 
         return phrase
 
