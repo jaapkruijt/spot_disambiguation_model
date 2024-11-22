@@ -627,6 +627,7 @@ class Disambiguator:
         determiner = {'nl': 'die ', 'en': 'the '}
         mention_corpus = []
         mention_characters = []
+        # Add mention history for main characters
         for character, history in self.common_ground.history.items():
             if len(history['human']) >= 3:
                 mention_corpus.append('. '.join(history['human']))
@@ -635,6 +636,7 @@ class Disambiguator:
         if not mention_corpus:
             return
 
+        # Add the mention history for main characters
         for character, history in self.common_ground.history.items():
             if character in mention_characters:
                 continue
